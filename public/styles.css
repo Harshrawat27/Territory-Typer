@@ -348,25 +348,28 @@ h1 {
 #typing-wrapper {
   position: relative;
   margin-bottom: 20px;
-  height: 200px; /* Larger typing area */
+  min-height: 200px; /* Minimum height */
+  max-height: 300px; /* Maximum height with scrolling */
   border: 2px solid #ddd;
   border-radius: 4px;
   background-color: #f9f9f9;
   padding: 12px;
-  overflow: hidden;
+  overflow-y: auto; /* Allow vertical scrolling if needed */
 }
 
 #placeholder-text {
   position: absolute;
   top: 12px;
   left: 12px;
+  right: 12px; /* Ensure text wraps properly */
   font-size: 18px;
   color: #888;
   opacity: 0.5;
-  white-space: pre-wrap;
-  word-break: break-word;
-  pointer-events: none; /* Prevent text selection */
-  user-select: none; /* Prevent text selection */
+  white-space: pre-wrap; /* Allow text wrapping */
+  word-break: break-word; /* Break words if needed */
+  pointer-events: none;
+  user-select: none;
+  line-height: 1.5; /* Better line height for readability */
 }
 
 #placeholder-text.error {
@@ -387,6 +390,11 @@ h1 {
   outline: none;
   color: #333;
   z-index: 1;
+  white-space: pre-wrap; /* Match the placeholder text wrapping */
+  word-break: break-word;
+  line-height: 1.5; /* Match line height with placeholder */
+  caret-color: #333; /* Visible cursor */
+  resize: none; /* Prevent textarea resizing if using textarea */
 }
 
 #typing-input:focus {
