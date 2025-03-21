@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Territory Typer - Multiplayer Geography Typing Game</title>
+    <!-- Extract your CSS to an external styles.css file -->
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div id="game-setup">
+      <div id="setup-panel">
+        <h2>Territory Typer</h2>
+        <div class="padding-5px"></div>
+        <p>
+          Compete to claim territories by typing phrases faster than your
+          opponents!
+        </p>
+        <div class="padding-5px"></div>
+        <div id="game-options">
+          <div class="option-buttons">
+            <button id="create-game-btn" class="option-btn active">
+              Create Game
+            </button>
+            <button id="join-game-btn" class="option-btn">Join Game</button>
+            <button id="random-match-btn" class="option-btn">
+              Random Match
+            </button>
+          </div>
+
+          <!-- Create Game Panel -->
+          <div id="create-game-panel" class="option-panel active">
+            <input
+              type="text"
+              id="create-player-name"
+              placeholder="Enter your nickname"
+              maxlength="15"
+            />
+            <button id="create-game">Create Game Room</button>
+
+            <div id="game-created" style="display: none">
+              <p>Share this game ID with your friends:</p>
+              <div id="game-id-display" class="game-id"></div>
+              <button id="copy-game-id">Copy Game ID</button>
+
+              <div class="player-list">
+                <h3>Players in room:</h3>
+                <ul id="host-players-list">
+                  <!-- Player names will be added here -->
+                </ul>
+              </div>
+
+              <button id="start-game">Start Game</button>
+              <p class="waiting-message">Waiting for players to join...</p>
+            </div>
+          </div>
+
+          <!-- Join Game Panel -->
+          <div id="join-game-panel" class="option-panel">
+            <input
+              type="text"
+              id="join-player-name"
+              placeholder="Enter your nickname"
+              maxlength="15"
+            />
+            <input type="text" id="game-id-input" placeholder="Enter Game ID" />
+            <button id="join-game">Join Game</button>
+
+            <div id="joined-game" style="display: none">
+              <div class="player-list">
+                <h3>Players in room:</h3>
+                <ul id="guest-players-list">
+                  <!-- Player names will be added here -->
+                </ul>
+              </div>
+              <p class="waiting-message">
+                Waiting for host to start the game...
+              </p>
+            </div>
+          </div>
+
+          <!-- Random Match Panel -->
+          <div id="random-match-panel" class="option-panel">
+            <input
+              type="text"
+              id="random-player-name"
+              placeholder="Enter your nickname"
+              maxlength="15"
+            />
+            <button id="find-match">Find Match</button>
+
+            <div id="finding-match" style="display: none">
+              <div class="loading-spinner"></div>
+              <p class="waiting-message">Finding a match...</p>
+              <button id="cancel-matchmaking">Cancel</button>
+
+              <div class="player-list" style="display: none">
+                <h3>Match found! Players:</h3>
+                <ul id="random-players-list">
+                  <!-- Player names will be added here -->
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="game-container">
+      <header>
+        <h1>Territory Typer</h1>
+        <p>Type the phrases faster than your opponents to claim territories!</p>
+      </header>
+
+      <div id="game-info">
+        <div id="timer">3:00</div>
+        <div id="scores">
+          <!-- Player scores will be added here -->
+        </div>
+      </div>
+
+      <div id="game-content">
+        <!-- Map on the left -->
+        <div id="map-container">
+          <!-- SVG Map will be inserted here -->
+          <svg viewBox="0 0 1000 500" width="100%" height="100%" id="world-map">
+            <!-- Example territories - these would be generated with actual world map paths -->
+            <path
+              class="territory"
+              id="north-america"
+              d="M150,120 L200,100 L280,150 L250,200 L180,220 L120,200 Z"
+              fill="#eee"
+              stroke="#ccc"
+              data-name="North America"
+            ></path>
+            <path
+              class="territory"
+              id="south-america"
+              d="M220,230 L260,250 L240,320 L190,340 L170,290 Z"
+              fill="#eee"
+              stroke="#ccc"
+              data-name="South America"
+            ></path>
+            <path
+              class="territory"
+              id="europe"
+              d="M420,120 L480,100 L510,140 L460,180 L430,160 Z"
+              fill="#eee"
+              stroke="#ccc"
+              data-name="Europe"
+            ></path>
+            <path
+              class="territory"
+              id="africa"
+              d="M420,190 L490,190 L520,260 L480,320 L420,310 L390,250 Z"
+              fill="#eee"
+              stroke="#ccc"
+              data-name="Africa"
+            ></path>
+            <path
+              class="territory"
+              id="asia"
+              d="M520,100 L650,120 L700,180 L620,250 L520,220 L490,170 Z"
+              fill="#eee"
+              stroke="#ccc"
+              data-name="Asia"
+            ></path>
+            <path
+              class="territory"
+              id="oceania"
+              d="M700,280 L750,290 L760,320 L730,350 L690,330 Z"
+              fill="#eee"
+              stroke="#ccc"
+              data-name="Oceania"
+            ></path>
+            <path
+              class="territory"
+              id="antarctica"
+              d="M300,400 L450,420 L600,410 L550,450 L350,450 Z"
+              fill="#eee"
+              stroke="#ccc"
+              data-name="Antarctica"
+            ></path>
+          </svg>
+        </div>
+
+        <!-- Typing area on the right -->
+        <div id="typing-area">
+          <div id="current-phrase">Click on a territory to start typing!</div>
+
+          <div id="typing-wrapper">
+            <div id="placeholder-text"></div>
+            <input
+              type="text"
+              id="typing-input"
+              placeholder="Type here..."
+              disabled
+            />
+          </div>
+
+          <div id="active-players">
+            <!-- Active players will be displayed here -->
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Update the game over screen -->
+    <div id="game-over">
+      <div id="game-results">
+        <h2>Game Over!</h2>
+        <div id="final-scores">
+          <!-- Final scores will be added here -->
+        </div>
+        <button id="play-again">Play Again</button>
+      </div>
+    </div>
+
+    <!-- Add Socket.io client script -->
+    <script src="/socket.io/socket.io.js"></script>
+
+    <!-- Add your client script -->
+    <script src="client.js"></script>
+  </body>
+</html>
