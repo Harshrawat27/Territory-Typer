@@ -85,26 +85,165 @@ function initTerritoryLabels() {
     .querySelectorAll('.territory-label')
     .forEach((label) => label.remove());
 
+  // Function to calculate appropriate label position based on SVG viewBox and container size
+  function calculateLabelPosition(territory, mapContainer) {
+    // Get the map container dimensions
+    const containerRect = mapContainer.getBoundingClientRect();
+
+    // Get the SVG element
+    const svgElement = document.getElementById('world-map');
+
+    // Get SVG viewBox values
+    const viewBox = svgElement.getAttribute('viewBox').split(' ');
+    const svgWidth = parseFloat(viewBox[2]);
+    const svgHeight = parseFloat(viewBox[3]);
+
+    // Calculate scaling factors
+    const scaleX = containerRect.width / svgWidth;
+    const scaleY = containerRect.height / svgHeight;
+
+    // Calculate the scaled coordinates (adjusted for the current display size)
+    const scaledX = territory.x * scaleX;
+    const scaledY = territory.y * scaleY;
+
+    // For territories on the right side of the map, position labels to the left of the point
+    // to ensure they stay within the viewport
+    const isRightSide = territory.x > svgWidth * 0.6;
+
+    return {
+      left: isRightSide ? `${scaledX - 100}px` : `${scaledX + 10}px`,
+      top: `${scaledY - 15}px`,
+      textAlign: isRightSide ? 'right' : 'left',
+    };
+  }
+
+  // Create the labels with responsive positioning
   gameState.territories.forEach((territory) => {
     const label = document.createElement('div');
     label.className = 'territory-label';
     label.textContent = territory.name;
-    label.style.left = `${territory.x}px`;
-    label.style.top = `${territory.y}px`;
+
+    // Calculate and set the position
+    const position = calculateLabelPosition(territory, elements.mapContainer);
+    label.style.left = position.left;
+    label.style.top = position.top;
+    label.style.textAlign = position.textAlign;
+
+    // Add data attribute to help with territory identification
+    label.dataset.territoryId = territory.id;
+
+    // Add the label to the map container
     elements.mapContainer.appendChild(label);
+  });
+
+  // Add window resize listener to update label positions when the window size changes
+  window.addEventListener('resize', function () {
+    gameState.territories.forEach((territory) => {
+      const label = document.querySelector(
+        `.territory-label[data-territory-id="${territory.id}"]`
+      );
+      if (label) {
+        const position = calculateLabelPosition(
+          territory,
+          elements.mapContainer
+        );
+        label.style.left = position.left;
+        label.style.top = position.top;
+        label.style.textAlign = position.textAlign;
+      }
+    });
   });
 }
 
 // Attach event listeners to territories
 function attachTerritoryEvents() {
   document.querySelectorAll('.territory').forEach((territoryEl) => {
+    // Add mouseover effect for better UX
+    territoryEl.addEventListener('mouseover', () => {
+      if (!gameState.isActive) return;
+
+      // Add a hover class to the territory
+      territoryEl.classList.add('territory-hover');
+
+      // Highlight the corresponding label
+      const territoryId = territoryEl.id;
+      const label = document.querySelector(
+        `.territory-label[data-territory-id="${territoryId}"]`
+      );
+      if (label) {
+        label.classList.add('hover');
+      }
+    });
+
+    // Remove hover effect
+    territoryEl.addEventListener('mouseout', () => {
+      territoryEl.classList.remove('territory-hover');
+
+      // Remove highlight from label
+      const territoryId = territoryEl.id;
+      const label = document.querySelector(
+        `.territory-label[data-territory-id="${territoryId}"]`
+      );
+      if (label) {
+        label.classList.remove('hover');
+      }
+    });
+
+    // Click event
     territoryEl.addEventListener('click', () => {
       if (!gameState.isActive) return;
 
       const territory = gameState.territories.find(
         (t) => t.id === territoryEl.id
       );
+
       if (territory) {
+        // Remove active class from all territories and labels
+        document
+          .querySelectorAll('.territory')
+          .forEach((t) => t.classList.remove('territory-active'));
+        document
+          .querySelectorAll('.territory-label')
+          .forEach((l) => l.classList.remove('active'));
+
+        // Add active class to the selected territory and its label
+        territoryEl.classList.add('territory-active');
+        const label = document.querySelector(
+          `.territory-label[data-territory-id="${territory.id}"]`
+        );
+        if (label) {
+          label.classList.add('active');
+        }
+
+        selectTerritory(territory);
+      }
+    });
+  });
+
+  // Also make labels clickable to select territories (for mobile users)
+  document.querySelectorAll('.territory-label').forEach((label) => {
+    label.style.pointerEvents = 'auto'; // Make labels clickable
+
+    label.addEventListener('click', () => {
+      if (!gameState.isActive) return;
+
+      const territoryId = label.dataset.territoryId;
+      const territory = gameState.territories.find((t) => t.id === territoryId);
+      const territoryEl = document.getElementById(territoryId);
+
+      if (territory && territoryEl) {
+        // Remove active class from all territories and labels
+        document
+          .querySelectorAll('.territory')
+          .forEach((t) => t.classList.remove('territory-active'));
+        document
+          .querySelectorAll('.territory-label')
+          .forEach((l) => l.classList.remove('active'));
+
+        // Add active class to the selected territory and its label
+        territoryEl.classList.add('territory-active');
+        label.classList.add('active');
+
         selectTerritory(territory);
       }
     });
@@ -383,6 +522,46 @@ function updateScores() {
   });
 }
 
+function updateTerritoryColors() {
+  gameState.territories.forEach((territory) => {
+    const territoryEl = document.getElementById(territory.id);
+    if (!territoryEl) return;
+
+    if (territory.owner) {
+      // Find owner's color
+      const owner = gameState.players.find((p) => p.id === territory.owner);
+      if (owner) {
+        territoryEl.setAttribute('fill', owner.color);
+        territoryEl.setAttribute('stroke', '#666');
+
+        // Also update the label to match owner's color
+        const label = document.querySelector(
+          `.territory-label[data-territory-id="${territory.id}"]`
+        );
+        if (label) {
+          label.style.backgroundColor = owner.color;
+          label.style.color = '#fff';
+          label.style.borderColor = 'rgba(0,0,0,0.2)';
+        }
+      }
+    } else {
+      // Unowned territory
+      territoryEl.setAttribute('fill', '#eee');
+      territoryEl.setAttribute('stroke', '#ccc');
+
+      // Reset label styling
+      const label = document.querySelector(
+        `.territory-label[data-territory-id="${territory.id}"]`
+      );
+      if (label) {
+        label.style.backgroundColor = 'rgba(255, 255, 255, 0.85)';
+        label.style.color = '#333';
+        label.style.borderColor = 'rgba(0, 0, 0, 0.1)';
+      }
+    }
+  });
+}
+
 // Start the game
 function startGame() {
   gameState.isActive = true;
@@ -391,15 +570,52 @@ function startGame() {
   // Reset any previous game state
   gameState.territories.forEach((territory) => {
     territory.owner = null;
-    document.getElementById(territory.id).setAttribute('fill', '#eee');
-    document.getElementById(territory.id).setAttribute('stroke', '#ccc');
   });
+
+  // Initialize territory labels with the new responsive approach
+  initTerritoryLabels();
+
+  // Attach events to territories and labels
+  attachTerritoryEvents();
+
+  // Update territory colors
+  updateTerritoryColors();
 
   // Update display
   updateScores();
   elements.currentPhrase.textContent = 'Click on a territory to start typing!';
   elements.placeholderText.textContent = '';
 }
+
+// Also update the claimTerritory function to call updateTerritoryColors
+socket.on(
+  'territoryClaimed',
+  ({ territoryId, playerId, playerName, playerColor, players }) => {
+    // Update the game state
+    gameState.players = players;
+
+    // Update the UI - now using the new function
+    updateTerritoryColors();
+    updateScores();
+
+    // If this player was typing for this territory, notify them
+    if (
+      gameState.selectedTerritory &&
+      gameState.selectedTerritory.id === territoryId &&
+      playerId !== gameState.currentPlayer.id
+    ) {
+      elements.currentPhrase.textContent = `${playerName} claimed ${gameState.selectedTerritory.name} before you!`;
+      elements.typingInput.disabled = true;
+      elements.placeholderText.textContent = '';
+      gameState.selectedTerritory = null;
+
+      // Remove active classes
+      document
+        .querySelectorAll('.territory-label')
+        .forEach((l) => l.classList.remove('active'));
+    }
+  }
+);
 
 // End the game
 function endGame(players) {

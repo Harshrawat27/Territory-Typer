@@ -59,10 +59,9 @@ h1 {
 }
 
 .territory {
-  position: absolute;
   cursor: pointer;
-  transition: transform 0.2s;
-  transform-origin: center;
+  transition: all 0.3s ease;
+  stroke-width: 1.5;
 }
 
 .territory:hover {
@@ -72,11 +71,91 @@ h1 {
 .territory-label {
   position: absolute;
   background-color: rgba(255, 255, 255, 0.85);
+  color: #333;
   border-radius: 4px;
-  padding: 5px 10px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  padding: 5px 8px;
   font-size: 14px;
+  font-weight: bold;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
   pointer-events: none;
+  z-index: 10;
+  white-space: nowrap;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  max-width: 150px;
+  transition: all 0.2s ease;
+}
+
+.territory-label.hover {
+  background-color: #f5f5f5;
+  transform: scale(1.05);
+  z-index: 12;
+}
+
+/* Make the label clickable on small screens */
+@media (max-width: 768px) {
+  .territory-label {
+    pointer-events: auto;
+    cursor: pointer;
+  }
+
+  .territory-label:hover {
+    background-color: #f0f0f0;
+  }
+}
+
+/* Create a pulsing effect when a territory is selected */
+@keyframes pulse {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.territory-label.active {
+  background-color: #fff;
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.3);
+  animation: pulse 1.5s infinite;
+  z-index: 11;
+}
+
+/* Add responsive adjustments */
+@media (max-width: 768px) {
+  .territory-label {
+    font-size: 12px;
+    padding: 3px 6px;
+    max-width: 100px;
+  }
+}
+
+@media (max-width: 576px) {
+  .territory-label {
+    font-size: 10px;
+    padding: 2px 4px;
+  }
+}
+
+/* Add a line connecting the label to the approximate center of each territory */
+.territory-label::before {
+  content: '';
+  position: absolute;
+  width: 10px;
+  height: 1px;
+  background-color: rgba(0, 0, 0, 0.3);
+  top: 50%;
+}
+
+/* Position the connector line based on label alignment */
+.territory-label[style*='text-align: left']::before {
+  left: -10px;
+}
+
+.territory-label[style*='text-align: right']::before {
+  right: -10px;
 }
 
 #typing-area {
@@ -320,12 +399,23 @@ h1 {
 }
 
 #map-container {
-  flex: 1;
-  height: 500px;
+  position: relative;
+  width: 100%;
+  height: 0;
+  padding-bottom: 50%; /* This creates a responsive 2:1 aspect ratio */
   background-color: #fff;
   border-radius: 8px;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
   overflow: hidden;
+}
+
+#world-map {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: #f8f8f8;
 }
 
 #typing-area {
