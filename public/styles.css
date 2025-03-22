@@ -357,6 +357,8 @@ h1 {
   overflow-y: auto;
   font-size: 18px;
   line-height: 1.5;
+  display: flex;
+  flex-direction: column;
 }
 
 .reference-text {
@@ -365,6 +367,8 @@ h1 {
   white-space: pre-wrap;
   user-select: none;
   cursor: default;
+  margin-bottom: 15px;
+  flex: 1;
 }
 
 .reference-char {
@@ -373,21 +377,23 @@ h1 {
   color: #888;
   background: transparent;
   border-radius: 2px;
-  padding: 0;
+  padding: 0 1px;
   margin: 0;
+  transition: all 0.1s ease-in-out;
 }
 
 .reference-char.correct {
   color: #2c7;
   background-color: rgba(40, 200, 120, 0.1);
 }
-
 /* Styling for incorrectly typed characters */
 .reference-char.incorrect {
   color: #e43;
   background-color: rgba(230, 60, 40, 0.1);
 }
-
+.reference-char.current {
+  position: relative;
+}
 /* Current character indicator (cursor) */
 .reference-char.current:after {
   content: '';
@@ -398,6 +404,32 @@ h1 {
   height: 2px;
   background-color: #333;
   animation: blink 1s infinite;
+}
+@keyframes shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  10%,
+  30%,
+  50%,
+  70%,
+  90% {
+    transform: translateX(-5px);
+  }
+  20%,
+  40%,
+  60%,
+  80% {
+    transform: translateX(5px);
+  }
+}
+
+.reference-char.shake {
+  animation: shake 0.5s;
+  color: #e43;
+  background-color: rgba(230, 60, 40, 0.3);
+  font-weight: bold;
 }
 
 /* Hidden input for capturing keystrokes */
@@ -425,6 +457,28 @@ h1 {
   }
 }
 
+.typing-status {
+  margin-top: 10px;
+  padding: 8px;
+  border-radius: 4px;
+  font-size: 14px;
+  background-color: #f0f0f0;
+  color: #666;
+  text-align: center;
+  transition: all 0.3s ease;
+}
+
+.typing-status.error {
+  background-color: #ffebee;
+  color: #e53935;
+  font-weight: bold;
+}
+
+.typing-status.success {
+  background-color: #e8f5e9;
+  color: #43a047;
+  font-weight: bold;
+}
 /* Add a highlight for the current line */
 .reference-text-line {
   padding: 0 2px;
@@ -441,6 +495,19 @@ h1 {
   font-weight: bold;
   text-align: center;
   padding: 20px;
+  background-color: #e8f5e9;
+  border-radius: 4px;
+  margin-top: 15px;
+}
+
+#typing-wrapper.focus {
+  border-color: #3498db;
+  box-shadow: 0 0 5px rgba(52, 152, 219, 0.5);
+}
+
+#typing-wrapper:focus-within {
+  border-color: #3498db;
+  box-shadow: 0 0 5px rgba(52, 152, 219, 0.5);
 }
 
 #placeholder-text {

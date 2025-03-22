@@ -116,6 +116,14 @@ function normalizeApostrophes(text) {
   return text.replace(/['′'‛]/g, "'");
 }
 
+// Calculate Words Per Minute (WPM)
+function calculateWPM(charCount, timeInSeconds) {
+  // Standard calculation: 5 characters = 1 word, divide by time in minutes
+  const wordCount = charCount / 5;
+  const timeInMinutes = timeInSeconds / 60;
+  return Math.round(wordCount / timeInMinutes);
+}
+
 // Select a territory to claim
 function selectTerritory(territory) {
   if (territory.owner === gameState.currentPlayer.id) {
@@ -165,6 +173,15 @@ function selectTerritory(territory) {
   hiddenInput.spellcheck = false;
   elements.typingWrapper.appendChild(hiddenInput);
 
+  // Create a status indicator for feedback
+  const statusIndicator = document.createElement('div');
+  statusIndicator.className = 'typing-status';
+  statusIndicator.textContent = 'Start typing...';
+  elements.typingWrapper.appendChild(statusIndicator);
+
+  // Store reference to elements
+  elements.typingStatus = statusIndicator;
+
   // Focus the hidden input
   hiddenInput.focus();
 
@@ -192,49 +209,98 @@ function handleTyping(e) {
   const referenceText = normalizeApostrophes(
     gameState.selectedTerritory.phrase
   );
-  const typedText = normalizeApostrophes(e.target.value);
+  let typedText = normalizeApostrophes(e.target.value);
+
+  // Prevent typing beyond valid characters
+  let validTyping = true;
+  let firstErrorPos = -1;
+
+  // Check if any characters typed so far are incorrect
+  for (let i = 0; i < typedText.length; i++) {
+    if (i >= referenceText.length || typedText[i] !== referenceText[i]) {
+      validTyping = false;
+      firstErrorPos = i;
+      break;
+    }
+  }
+
+  // If there's an error, truncate the typed text to the last valid position
+  if (!validTyping && firstErrorPos >= 0) {
+    typedText = typedText.substring(0, firstErrorPos);
+    e.target.value = typedText;
+    // Show error status
+    if (elements.typingStatus) {
+      elements.typingStatus.textContent = 'Error! Fix before continuing.';
+      elements.typingStatus.className = 'typing-status error';
+
+      // Add shake animation to the error character
+      const referenceChars = document.querySelectorAll('.reference-char');
+      if (firstErrorPos < referenceChars.length) {
+        referenceChars[firstErrorPos].classList.add('shake');
+        // Remove the shake class after animation completes
+        setTimeout(() => {
+          referenceChars[firstErrorPos].classList.remove('shake');
+        }, 500);
+      }
+    }
+  } else if (elements.typingStatus) {
+    // Show progress status
+    const progress = Math.floor(
+      (typedText.length / referenceText.length) * 100
+    );
+    elements.typingStatus.textContent = `Progress: ${progress}% complete`;
+    elements.typingStatus.className = 'typing-status';
+  }
 
   // Update character styling based on what's been typed
   const referenceChars = document.querySelectorAll('.reference-char');
-
-  let allCorrect = true;
 
   for (let i = 0; i < referenceChars.length; i++) {
     const charSpan = referenceChars[i];
 
     if (i < typedText.length) {
-      // Character has been typed
-      if (typedText[i] === referenceText[i]) {
-        // Correct character
-        charSpan.className = 'reference-char correct';
-      } else {
-        // Incorrect character
-        charSpan.className = 'reference-char incorrect';
-        allCorrect = false;
+      // Character has been typed (all should be correct due to our validation)
+      charSpan.className = 'reference-char correct';
+
+      // Add cursor indicator to the next character to type
+      if (i === typedText.length - 1 && i + 1 < referenceChars.length) {
+        referenceChars[i + 1].classList.add('current');
       }
     } else {
+      // Remove current indicator from all other chars
+      charSpan.classList.remove('current');
+
       // Character not yet typed
       charSpan.className = 'reference-char';
     }
   }
 
-  // Check if all typed characters are correct and complete
-  if (allCorrect && typedText.length === referenceText.length) {
-    // Calculate typing speed
+  // Check if typing is complete (all text typed correctly)
+  if (typedText.length === referenceText.length) {
+    // Calculate typing speed in WPM
     const typingTime = (Date.now() - typingStartTime) / 1000; // in seconds
-    const typingSpeed = Math.round((currentPhraseLength / typingTime) * 60); // chars per minute
+    const typingWPM = calculateWPM(currentPhraseLength, typingTime);
+
+    // Update typing status
+    if (elements.typingStatus) {
+      elements.typingStatus.textContent = `Completed! Your typing speed: ${typingWPM} WPM`;
+      elements.typingStatus.className = 'typing-status success';
+    }
 
     // Notify server
     socket.emit('claimTerritory', {
       gameId: gameState.gameId,
       territoryId: gameState.selectedTerritory.id,
-      typingSpeed: typingSpeed,
+      typingSpeed: typingWPM, // Now sending WPM instead of CPM
     });
 
-    // Clear the typing area
-    elements.typingWrapper.innerHTML = '';
-    elements.currentPhrase.textContent = `You claimed ${gameState.selectedTerritory.name}!`;
-    gameState.selectedTerritory = null;
+    // Show completion message
+    setTimeout(() => {
+      // Clear the typing area
+      elements.typingWrapper.innerHTML = '';
+      elements.currentPhrase.textContent = `You claimed ${gameState.selectedTerritory.name}!`;
+      gameState.selectedTerritory = null;
+    }, 1500); // Show completion message for 1.5 seconds before clearing
   }
 }
 
@@ -254,7 +320,6 @@ function initTypingSystem() {
   elements.typingWrapper.innerHTML = '';
   elements.currentPhrase.textContent = 'Click on a territory to start typing!';
 }
-
 const originalStartGame = startGame;
 startGame = function () {
   originalStartGame();
@@ -359,22 +424,22 @@ function endGame(players) {
   // Add table header
   const headerRow = document.createElement('tr');
   headerRow.innerHTML = `
-        <th>Rank</th>
-        <th>Player</th>
-        <th>Territories</th>
-        <th>Typing Speed</th>
-    `;
+      <th>Rank</th>
+      <th>Player</th>
+      <th>Territories</th>
+      <th>Typing Speed</th>
+  `;
   scoresTable.appendChild(headerRow);
 
   // Add player rows
   players.forEach((player, index) => {
     const playerRow = document.createElement('tr');
     playerRow.innerHTML = `
-            <td>${index + 1}</td>
-            <td><span style="color:${player.color}">${player.name}</span></td>
-            <td>${player.score}</td>
-            <td>${player.avgTypingSpeed || 0} CPM</td>
-        `;
+          <td>${index + 1}</td>
+          <td><span style="color:${player.color}">${player.name}</span></td>
+          <td>${player.score}</td>
+          <td>${player.avgTypingSpeed || 0} WPM</td>
+      `;
     scoresTable.appendChild(playerRow);
   });
 

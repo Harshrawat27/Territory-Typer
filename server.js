@@ -344,7 +344,7 @@ io.on('connection', (socket) => {
       const player = game.players.find((p) => p.id === socket.id);
       if (!player) return;
 
-      // Save typing speed for the player
+      // Save typing speed for the player (now in WPM instead of CPM)
       if (!player.typingSpeeds) {
         player.typingSpeeds = [];
       }
