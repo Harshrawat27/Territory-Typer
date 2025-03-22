@@ -271,7 +271,14 @@ io.on('connection', (socket) => {
 
             // Sort players by score and include typing speeds
             const sortedPlayers = [...game.players]
-              .sort((a, b) => b.score - a.score)
+              .sort((a, b) => {
+                // First compare territories
+                if (b.score !== a.score) {
+                  return b.score - a.score;
+                }
+                // If tied in territories, compare typing speeds
+                return (b.avgTypingSpeed || 0) - (a.avgTypingSpeed || 0);
+              })
               .map((p) => ({
                 ...p,
                 avgTypingSpeed: p.avgTypingSpeed || 0,
@@ -603,34 +610,6 @@ io.on('connection', (socket) => {
       console.error('Error claiming territory:', error);
     }
   });
-
-  // Also update the game-over handler for timeUp scenario
-  // Find this section in your code (around line 220) and replace it:
-  if (timerCounter <= 0) {
-    clearInterval(game.timer);
-    game.status = 'ended';
-    game.timeRemaining = 0;
-
-    // Sort players by score and include typing speeds
-    const sortedPlayers = [...game.players]
-      .sort((a, b) => {
-        // First compare territories
-        if (b.score !== a.score) {
-          return b.score - a.score;
-        }
-        // If tied in territories, compare typing speeds
-        return (b.avgTypingSpeed || 0) - (a.avgTypingSpeed || 0);
-      })
-      .map((p) => ({
-        ...p,
-        avgTypingSpeed: p.avgTypingSpeed || 0,
-      }));
-
-    io.to(gameId).emit('gameOver', {
-      players: sortedPlayers,
-      reason: 'timeUp',
-    });
-  }
 
   // Handle disconnections
   socket.on('disconnect', () => {
