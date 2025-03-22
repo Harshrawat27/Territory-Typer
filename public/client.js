@@ -111,6 +111,12 @@ function attachTerritoryEvents() {
   });
 }
 
+// Add this function to normalize apostrophes in your client.js file
+function normalizeApostrophes(text) {
+  // Replace all types of apostrophes with a standard one
+  return text.replace(/['′'‛]/g, "'");
+}
+
 // Select a territory to claim
 function selectTerritory(territory) {
   if (territory.owner === gameState.currentPlayer.id) {
@@ -130,7 +136,7 @@ function selectTerritory(territory) {
   typingStartTime = Date.now();
   currentPhraseLength = territory.phrase.length;
 
-  // Set the placeholder text
+  // Set the placeholder text - clear any previous content first
   elements.placeholderText.textContent = territory.phrase;
   elements.placeholderText.classList.remove('error');
 
@@ -287,7 +293,7 @@ elements.typingInput.addEventListener('input', (e) => {
   if (!gameState.selectedTerritory) return;
 
   const targetPhrase = gameState.selectedTerritory.phrase;
-  const typedText = e.target.value;
+  let typedText = e.target.value;
 
   // Check if the input was a paste event
   const inputType = e.inputType;
@@ -298,11 +304,15 @@ elements.typingInput.addEventListener('input', (e) => {
     return;
   }
 
-  // Update placeholder visibility
-  updatePlaceholderVisibility(typedText, targetPhrase);
+  // Normalize apostrophes in both the typed text and target phrase
+  const normalizedTyped = normalizeApostrophes(typedText);
+  const normalizedTarget = normalizeApostrophes(targetPhrase);
 
-  // Check if the typed text matches the phrase
-  if (typedText === targetPhrase) {
+  // Update placeholder visibility with normalized text
+  updatePlaceholderVisibility(normalizedTyped, normalizedTarget);
+
+  // Check if the normalized typed text matches the normalized phrase
+  if (normalizedTyped === normalizedTarget) {
     // Calculate typing speed (characters per minute)
     const typingTime = (Date.now() - typingStartTime) / 1000; // in seconds
     const typingSpeed = Math.round((currentPhraseLength / typingTime) * 60); // chars per minute
