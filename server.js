@@ -63,7 +63,7 @@ function createTerritories() {
       id: 'asia',
       name: 'Asia',
       phrase:
-        'Asia, the largest continent, is home to over four billion people and some of the world’s oldest civilizations, including China and India. It has diverse landscapes, from the Himalayas to tropical islands. Economically powerful, it leads in technology and manufacturing. Asia’s cultural influence is vast, with traditions spanning thousands of years.',
+        "Asia, the largest continent, is home to over four billion people and some of the world's oldest civilizations, including China and India. It has diverse landscapes, from the Himalayas to tropical islands. Economically powerful, it leads in technology and manufacturing. Asia's cultural influence is vast, with traditions spanning thousands of years.",
       owner: null,
       x: 600,
       y: 180,
@@ -72,7 +72,7 @@ function createTerritories() {
       id: 'oceania',
       name: 'Oceania',
       phrase:
-        'Oceania consists of Australia, New Zealand, and Pacific island nations such as Fiji and Papua New Guinea. It is famous for the Great Barrier Reef, indigenous cultures, and unique wildlife. The region has stunning beaches, diverse ecosystems, and a strong connection to nature. Oceania’s cultural identity is shaped by its island heritage.',
+        "Oceania consists of Australia, New Zealand, and Pacific island nations such as Fiji and Papua New Guinea. It is famous for the Great Barrier Reef, indigenous cultures, and unique wildlife. The region has stunning beaches, diverse ecosystems, and a strong connection to nature. Oceania's cultural identity is shaped by its island heritage.",
       owner: null,
       x: 720,
       y: 310,
@@ -81,7 +81,7 @@ function createTerritories() {
       id: 'antarctica',
       name: 'Antarctica',
       phrase:
-        'Antarctica is Earth’s coldest and most remote continent, covered in ice year-round. It has no permanent population, only scientists conducting research. Home to penguins, seals, and whales, it plays a crucial role in climate studies. Antarctica’s extreme conditions make it one of the least explored and most fascinating places on the planet.',
+        "Antarctica is Earth's coldest and most remote continent, covered in ice year-round. It has no permanent population, only scientists conducting research. Home to penguins, seals, and whales, it plays a crucial role in climate studies. Antarctica's extreme conditions make it one of the least explored and most fascinating places on the planet.",
       owner: null,
       x: 450,
       y: 420,
