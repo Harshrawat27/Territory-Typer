@@ -1,4 +1,4 @@
-// client.js - Complete file with all new features
+// client.js - Fixed version with all multiplayer and territory claiming issues resolved
 
 // Connect to Socket.io server
 const socket = io();
@@ -140,6 +140,400 @@ function initTerritoryLabels() {
     elements.mapContainer.appendChild(label);
   });
 
+  // Game started
+  socket.on('gameStarted', ({ game }) => {
+    // Hide any UI elements from the matchmaking that might still be visible
+    if (elements.matchCountdownContainer) {
+      elements.matchCountdownContainer.style.display = 'none';
+    }
+
+    if (elements.findingMatchDiv) {
+      // Update the waiting message in case it's still visible
+      const waitingMessage = document.querySelector(
+        '#finding-match .waiting-message'
+      );
+      if (waitingMessage) {
+        waitingMessage.textContent = 'Game starting...';
+      }
+    }
+
+    // Set the game state
+    gameState.territories = game.territories;
+    gameState.timeRemaining = game.timeRemaining;
+    gameState.players = game.players; // Make sure to update players from the game object
+
+    console.log('Game started!', game);
+
+    // Start the game
+    startGame();
+  });
+
+  // Timer update
+  socket.on('timerUpdate', ({ timeRemaining }) => {
+    gameState.timeRemaining = timeRemaining;
+
+    const minutes = Math.floor(timeRemaining / 60);
+    const seconds = timeRemaining % 60;
+    elements.timer.textContent = `${minutes}:${seconds
+      .toString()
+      .padStart(2, '0')}`;
+  });
+
+  // Territory selected
+  socket.on('territorySelected', ({ territory }) => {
+    // This confirms our selection was received by the server
+    // No action needed as we already updated the UI
+  });
+
+  // Territory already claimed
+  socket.on(
+    'territoryAlreadyClaimed',
+    ({ territoryId, ownerId, ownerName }) => {
+      if (
+        gameState.selectedTerritory &&
+        gameState.selectedTerritory.id === territoryId
+      ) {
+        elements.currentPhrase.textContent = `${gameState.selectedTerritory.name} is already claimed by ${ownerName}!`;
+        elements.typingWrapper.innerHTML = '';
+        gameState.selectedTerritory = null;
+      }
+    }
+  );
+
+  // Territory attempt by another player
+  socket.on('territoryAttempt', ({ playerId, playerName, territoryId }) => {
+    // Another player is attempting to claim this territory
+    // You could add some UI indication if needed
+    const territory = gameState.territories.find((t) => t.id === territoryId);
+    if (territory) {
+      // Show a brief flash or notification that someone is typing for this territory
+      const territoryEl = document.getElementById(territoryId);
+      if (territoryEl) {
+        // Add a pulsing effect or some visual indicator
+        territoryEl.classList.add('territory-contested');
+        setTimeout(() => {
+          territoryEl.classList.remove('territory-contested');
+        }, 2000);
+      }
+    }
+  });
+
+  // Territory claimed
+  socket.on(
+    'territoryClaimed',
+    ({ territoryId, playerId, playerName, playerColor, players }) => {
+      // Update the game state
+      gameState.players = players;
+
+      // Find the territory and update it
+      const territory = gameState.territories.find((t) => t.id === territoryId);
+      if (territory) {
+        territory.owner = playerId;
+      }
+
+      // Update the UI
+      claimTerritory(territoryId, playerId);
+      updateScores();
+      updateTerritoryColors();
+
+      // If this player was typing for this territory, notify them
+      if (
+        gameState.selectedTerritory &&
+        gameState.selectedTerritory.id === territoryId &&
+        playerId !== gameState.currentPlayer.id
+      ) {
+        elements.currentPhrase.textContent = `${playerName} claimed ${gameState.selectedTerritory.name} before you!`;
+        elements.typingWrapper.innerHTML = '';
+        gameState.selectedTerritory = null;
+
+        // Remove active classes
+        document
+          .querySelectorAll('.territory')
+          .forEach((t) => t.classList.remove('territory-active'));
+        document
+          .querySelectorAll('.territory-label')
+          .forEach((l) => l.classList.remove('active'));
+      }
+    }
+  );
+
+  // Matchmaking
+  socket.on('matchmaking', ({ status, waitingPlayers }) => {
+    // Update UI to show current matchmaking status
+    elements.randomPlayerName.disabled = true;
+    elements.findMatchBtn.style.display = 'none';
+    elements.findingMatchDiv.style.display = 'block';
+
+    // Update waiting players count if provided
+    if (waitingPlayers !== undefined) {
+      document.querySelector(
+        '#finding-match .waiting-message'
+      ).textContent = `Finding a match... (${waitingPlayers} player${
+        waitingPlayers !== 1 ? 's' : ''
+      } waiting)`;
+    }
+  });
+
+  // Match progress - will be emitted when we have at least 2 players but are waiting for more
+  socket.on('matchProgress', ({ players, secondsRemaining }) => {
+    // Update local game state
+    gameState.players = players;
+    gameState.matchCountdown = secondsRemaining;
+
+    // Update the player list
+    updatePlayersList(elements.randomPlayersList, players);
+    document.querySelector('#finding-match .player-list').style.display =
+      'block';
+
+    // Show and update the countdown timer
+    if (!elements.matchCountdownContainer) {
+      // Create the countdown container if it doesn't exist
+      const countdownContainer = document.createElement('div');
+      countdownContainer.id = 'match-countdown-container';
+      countdownContainer.className = 'match-countdown-container';
+
+      const countdownDisplay = document.createElement('div');
+      countdownDisplay.id = 'match-countdown-display';
+      countdownDisplay.className = 'match-countdown-display';
+
+      countdownContainer.appendChild(
+        document.createTextNode('Game starts in: ')
+      );
+      countdownContainer.appendChild(countdownDisplay);
+
+      elements.findingMatchDiv.appendChild(countdownContainer);
+
+      // Update our elements reference
+      elements.matchCountdownContainer = countdownContainer;
+      elements.matchCountdownDisplay = countdownDisplay;
+    }
+
+    // Show the countdown container
+    elements.matchCountdownContainer.style.display = 'block';
+
+    // Update the countdown display
+    elements.matchCountdownDisplay.textContent = secondsRemaining;
+
+    // Update waiting message based on player count
+    if (players.length >= 3) {
+      document.querySelector(
+        '#finding-match .waiting-message'
+      ).textContent = `Match full! Game starting soon...`;
+    } else {
+      document.querySelector(
+        '#finding-match .waiting-message'
+      ).textContent = `Match found! Waiting for more players to join... (${players.length}/3)`;
+    }
+  });
+
+  // Match found
+  socket.on('matchFound', ({ gameId, player, game }) => {
+    gameState.gameId = gameId;
+    gameState.isHost = player.isHost;
+    gameState.gameMode = 'random';
+    gameState.players = game.players;
+    gameState.territories = game.territories;
+    gameState.currentPlayer = player;
+
+    // Update UI
+    document.querySelector('#finding-match .player-list').style.display =
+      'block';
+    updatePlayersList(elements.randomPlayersList, game.players);
+
+    // Update waiting message based on player count
+    if (game.players.length >= 3) {
+      document.querySelector(
+        '#finding-match .waiting-message'
+      ).textContent = `Match full! Game starting soon...`;
+    } else {
+      document.querySelector(
+        '#finding-match .waiting-message'
+      ).textContent = `Match found! Waiting for more players to join... (${game.players.length}/3)`;
+    }
+  });
+
+  // Matchmaking cancelled
+  socket.on('matchmakingCancelled', () => {
+    // Reset UI
+    elements.randomPlayerName.disabled = false;
+    elements.findMatchBtn.style.display = 'block';
+    elements.findingMatchDiv.style.display = 'none';
+    document.querySelector('#finding-match .player-list').style.display =
+      'none';
+
+    // Reset game state
+    gameState.gameId = null;
+    gameState.isHost = false;
+    gameState.gameMode = null;
+    gameState.players = [];
+    gameState.currentPlayer = null;
+  });
+
+  // Add a CSS rule for the countdown display
+  document.addEventListener('DOMContentLoaded', function () {
+    const style = document.createElement('style');
+    style.textContent = `
+    .match-countdown-container {
+      margin: 15px auto;
+      padding: 10px 15px;
+      background-color: #f3f3f3;
+      border-radius: 5px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-weight: bold;
+    }
+    
+    .match-countdown-display {
+      display: inline-block;
+      margin-left: 5px;
+      color: #e74c3c;
+      font-size: 18px;
+      font-weight: bold;
+    }
+    
+    .territory-contested {
+      animation: pulse 1s infinite;
+    }
+    
+    @keyframes pulse {
+      0% { opacity: 1; }
+      50% { opacity: 0.6; }
+      100% { opacity: 1; }
+    }
+  `;
+    document.head.appendChild(style);
+  });
+
+  // Game over
+  socket.on('gameOver', ({ players, reason }) => {
+    gameState.isActive = false;
+
+    // Add reason to display if needed
+    let reasonText = '';
+    if (reason === 'allCaptured') {
+      reasonText = 'All territories have been captured!';
+    } else if (reason === 'timeUp') {
+      reasonText = 'Time is up!';
+    } else if (reason === 'opponentsLeft') {
+      reasonText = 'Your opponents have left the game!';
+    }
+
+    // Show reason if available
+    if (reasonText) {
+      const reasonElement = document.createElement('p');
+      reasonElement.className = 'game-end-reason';
+      reasonElement.textContent = reasonText;
+      elements.finalScores.innerHTML = '';
+      elements.finalScores.appendChild(reasonElement);
+    }
+
+    endGame(players);
+  });
+
+  // Player left
+  socket.on('playerLeft', ({ playerId, playerName, players }) => {
+    gameState.players = players;
+
+    // Update the player list
+    if (gameState.gameMode === 'create') {
+      updatePlayersList(elements.hostPlayersList, players);
+    } else if (gameState.gameMode === 'join') {
+      updatePlayersList(elements.guestPlayersList, players);
+    } else if (gameState.gameMode === 'random') {
+      updatePlayersList(elements.randomPlayersList, players);
+    }
+
+    if (gameState.isActive) {
+      updateScores();
+    }
+  });
+
+  // New host assigned
+  socket.on('newHost', ({ playerId, playerName }) => {
+    const player = gameState.players.find((p) => p.id === playerId);
+    if (player) {
+      player.isHost = true;
+
+      // Update UI to show new host
+      if (playerId === gameState.currentPlayer.id) {
+        gameState.isHost = true;
+        // You are now the host
+        if (!gameState.isActive) {
+          elements.startGameBtn.style.display = 'block';
+        }
+      }
+
+      // Update the player list
+      if (gameState.gameMode === 'create') {
+        updatePlayersList(elements.hostPlayersList, gameState.players);
+      } else if (gameState.gameMode === 'join') {
+        updatePlayersList(elements.guestPlayersList, gameState.players);
+      } else if (gameState.gameMode === 'random') {
+        updatePlayersList(elements.randomPlayersList, gameState.players);
+      }
+    }
+  });
+
+  // Game ended
+  socket.on('gameEnded', ({ reason }) => {
+    // Handle different reasons for game ending
+    let message = '';
+
+    switch (reason) {
+      case 'hostLeft':
+        message = 'The host left the game.';
+        break;
+      case 'cancelled':
+        message = 'The game was cancelled.';
+        break;
+      default:
+        message = 'The game has ended.';
+    }
+
+    if (!gameState.isActive) {
+      alert(message);
+
+      // Reset UI based on game mode
+      if (gameState.gameMode === 'join') {
+        elements.joinPlayerName.disabled = false;
+        elements.gameIdInput.disabled = false;
+        elements.joinGameButton.style.display = 'block';
+        elements.joinedGameDiv.style.display = 'none';
+      } else if (gameState.gameMode === 'random') {
+        elements.randomPlayerName.disabled = false;
+        elements.findMatchBtn.style.display = 'block';
+        elements.findingMatchDiv.style.display = 'none';
+        document.querySelector('#finding-match .player-list').style.display =
+          'none';
+      }
+
+      // Reset game state
+      gameState.gameId = null;
+      gameState.isHost = false;
+      gameState.gameMode = null;
+      gameState.players = [];
+      gameState.currentPlayer = null;
+    }
+  });
+
+  // Error messages
+  socket.on('error', ({ message }) => {
+    alert(message);
+  });
+
+  // Initialize the game UI
+  document.addEventListener('DOMContentLoaded', function () {
+    // Initialize territory events
+    attachTerritoryEvents();
+
+    // Make sure the game container is hidden initially
+    const gameContainer = document.getElementById('game-container');
+    if (gameContainer) {
+      gameContainer.style.display = 'none';
+    }
+  });
+
   // Add window resize listener to update label positions when the window size changes
   window.addEventListener('resize', function () {
     gameState.territories.forEach((territory) => {
@@ -269,13 +663,18 @@ function calculateWPM(charCount, timeInSeconds) {
 
 // Select a territory to claim
 function selectTerritory(territory) {
+  // Check if territory is already owned by current player
   if (territory.owner === gameState.currentPlayer.id) {
     elements.currentPhrase.textContent = `You already own ${territory.name}!`;
     return;
   }
 
+  // Check if territory is already owned by another player
   if (territory.owner !== null) {
-    elements.currentPhrase.textContent = `${territory.name} is already claimed!`;
+    // Find owner's name
+    const owner = gameState.players.find((p) => p.id === territory.owner);
+    const ownerName = owner ? owner.name : 'Another player';
+    elements.currentPhrase.textContent = `${territory.name} is already claimed by ${ownerName}!`;
     return;
   }
 
@@ -447,7 +846,7 @@ function handleTyping(e) {
   }
 }
 
-// Add this to initialize the typing system when the game starts
+// Function to initialize the typing system when the game starts
 function initTypingSystem() {
   // Remove old event listeners
   const oldInput = elements.typingInput;
@@ -463,11 +862,40 @@ function initTypingSystem() {
   elements.typingWrapper.innerHTML = '';
   elements.currentPhrase.textContent = 'Click on a territory to start typing!';
 }
-const originalStartGame = startGame;
-startGame = function () {
-  originalStartGame();
+
+// Start the game
+function startGame() {
+  gameState.isActive = true;
+  elements.setupPanel.style.display = 'none';
+
+  // Make game container visible
+  const gameContainer = document.getElementById('game-container');
+  if (gameContainer) {
+    gameContainer.style.display = 'flex';
+  }
+
+  // Reset any previous game state
+  gameState.territories.forEach((territory) => {
+    territory.owner = null;
+  });
+
+  // Initialize territory labels with the new responsive approach
+  initTerritoryLabels();
+
+  // Attach events to territories and labels
+  attachTerritoryEvents();
+
+  // Initialize typing system
   initTypingSystem();
-};
+
+  // Update territory colors
+  updateTerritoryColors();
+
+  // Update display
+  updateScores();
+  elements.currentPhrase.textContent = 'Click on a territory to start typing!';
+  elements.placeholderText.textContent = '';
+}
 
 // Function to update the visibility of placeholder text as user types
 function updatePlaceholderVisibility(typedText, targetPhrase) {
@@ -497,12 +925,23 @@ function claimTerritory(territoryId, playerId) {
 
   territory.owner = playerId;
   const territoryEl = document.getElementById(territoryId);
+  if (!territoryEl) return;
 
   // Find player color
   const player = gameState.players.find((p) => p.id === playerId);
   if (player) {
     territoryEl.setAttribute('fill', player.color);
     territoryEl.setAttribute('stroke', '#666');
+
+    // Update the label to match owner's color
+    const label = document.querySelector(
+      `.territory-label[data-territory-id="${territoryId}"]`
+    );
+    if (label) {
+      label.style.backgroundColor = player.color;
+      label.style.color = '#fff';
+      label.style.borderColor = 'rgba(0,0,0,0.2)';
+    }
   }
 }
 
@@ -565,61 +1004,6 @@ function updateTerritoryColors() {
     }
   });
 }
-
-// Start the game
-function startGame() {
-  gameState.isActive = true;
-  elements.setupPanel.style.display = 'none';
-
-  // Reset any previous game state
-  gameState.territories.forEach((territory) => {
-    territory.owner = null;
-  });
-
-  // Initialize territory labels with the new responsive approach
-  initTerritoryLabels();
-
-  // Attach events to territories and labels
-  attachTerritoryEvents();
-
-  // Update territory colors
-  updateTerritoryColors();
-
-  // Update display
-  updateScores();
-  elements.currentPhrase.textContent = 'Click on a territory to start typing!';
-  elements.placeholderText.textContent = '';
-}
-
-// Also update the claimTerritory function to call updateTerritoryColors
-socket.on(
-  'territoryClaimed',
-  ({ territoryId, playerId, playerName, playerColor, players }) => {
-    // Update the game state
-    gameState.players = players;
-
-    // Update the UI - now using the new function
-    updateTerritoryColors();
-    updateScores();
-
-    // If this player was typing for this territory, notify them
-    if (
-      gameState.selectedTerritory &&
-      gameState.selectedTerritory.id === territoryId &&
-      playerId !== gameState.currentPlayer.id
-    ) {
-      elements.currentPhrase.textContent = `${playerName} claimed ${gameState.selectedTerritory.name} before you!`;
-      elements.typingInput.disabled = true;
-      elements.placeholderText.textContent = '';
-      gameState.selectedTerritory = null;
-
-      // Remove active classes
-      document
-        .querySelectorAll('.territory-label')
-        .forEach((l) => l.classList.remove('active'));
-    }
-  }
-);
 
 // End the game
 function endGame(players) {
@@ -684,46 +1068,7 @@ function updatePlayersList(listElement, players) {
 
 // Check typing accuracy and handle territory claim
 elements.typingInput.addEventListener('input', (e) => {
-  if (!gameState.selectedTerritory) return;
-
-  const targetPhrase = gameState.selectedTerritory.phrase;
-  let typedText = e.target.value;
-
-  // Check if the input was a paste event
-  const inputType = e.inputType;
-  if (inputType === 'insertFromPaste') {
-    // Block paste by reverting to previous value
-    e.preventDefault();
-    e.target.value = typedText.substring(0, typedText.length - 1);
-    return;
-  }
-
-  // Normalize apostrophes in both the typed text and target phrase
-  const normalizedTyped = normalizeApostrophes(typedText);
-  const normalizedTarget = normalizeApostrophes(targetPhrase);
-
-  // Update placeholder visibility with normalized text
-  updatePlaceholderVisibility(normalizedTyped, normalizedTarget);
-
-  // Check if the normalized typed text matches the normalized phrase
-  if (normalizedTyped === normalizedTarget) {
-    // Calculate typing speed (characters per minute)
-    const typingTime = (Date.now() - typingStartTime) / 1000; // in seconds
-    const typingSpeed = Math.round((currentPhraseLength / typingTime) * 60); // chars per minute
-
-    // Notify server about territory claim with typing speed
-    socket.emit('claimTerritory', {
-      gameId: gameState.gameId,
-      territoryId: gameState.selectedTerritory.id,
-      typingSpeed: typingSpeed,
-    });
-
-    elements.typingInput.value = '';
-    elements.placeholderText.textContent = '';
-    elements.typingInput.disabled = true;
-    elements.currentPhrase.textContent = `You claimed ${gameState.selectedTerritory.name}!`;
-    gameState.selectedTerritory = null;
-  }
+  handleTyping(e);
 });
 
 // Prevent paste in typing input
@@ -842,6 +1187,12 @@ elements.playAgainBtn.addEventListener('click', () => {
   elements.gameOver.style.display = 'none';
   elements.setupPanel.style.display = 'flex';
 
+  // Hide game container
+  const gameContainer = document.getElementById('game-container');
+  if (gameContainer) {
+    gameContainer.style.display = 'none';
+  }
+
   // Send play again request to server
   socket.emit('playAgain');
 
@@ -929,335 +1280,3 @@ socket.on('playerJoined', ({ player, gameId, players }) => {
       'block';
   }
 });
-
-// Game started
-socket.on('gameStarted', ({ game }) => {
-  // Hide any UI elements from the matchmaking that might still be visible
-  if (elements.matchCountdownContainer) {
-    elements.matchCountdownContainer.style.display = 'none';
-  }
-
-  if (elements.findingMatchDiv) {
-    // Update the waiting message in case it's still visible
-    const waitingMessage = document.querySelector(
-      '#finding-match .waiting-message'
-    );
-    if (waitingMessage) {
-      waitingMessage.textContent = 'Game starting...';
-    }
-  }
-
-  // Set the game state
-  gameState.territories = game.territories;
-  gameState.timeRemaining = game.timeRemaining;
-
-  console.log('Game started!');
-
-  // Initialize territory UI
-  initTerritoryLabels();
-  startGame();
-});
-
-// Timer update
-socket.on('timerUpdate', ({ timeRemaining }) => {
-  gameState.timeRemaining = timeRemaining;
-
-  const minutes = Math.floor(timeRemaining / 60);
-  const seconds = timeRemaining % 60;
-  elements.timer.textContent = `${minutes}:${seconds
-    .toString()
-    .padStart(2, '0')}`;
-});
-
-// Territory selected
-socket.on('territorySelected', ({ territory }) => {
-  // This confirms our selection was received by the server
-  // No action needed as we already updated the UI
-});
-
-// Territory attempt by another player
-socket.on('territoryAttempt', ({ playerId, playerName, territoryId }) => {
-  // Another player is attempting to claim this territory
-  // You could add some UI indication if you wanted
-});
-
-// Territory claimed
-socket.on(
-  'territoryClaimed',
-  ({ territoryId, playerId, playerName, playerColor, players }) => {
-    // Update the game state
-    gameState.players = players;
-
-    // Update the UI
-    claimTerritory(territoryId, playerId);
-    updateScores();
-
-    // If this player was typing for this territory, notify them
-    if (
-      gameState.selectedTerritory &&
-      gameState.selectedTerritory.id === territoryId &&
-      playerId !== gameState.currentPlayer.id
-    ) {
-      elements.currentPhrase.textContent = `${playerName} claimed ${gameState.selectedTerritory.name} before you!`;
-      elements.typingInput.disabled = true;
-      elements.placeholderText.textContent = '';
-      gameState.selectedTerritory = null;
-    }
-  }
-);
-
-// Matchmaking
-socket.on('matchmaking', ({ gameId, player, game, status, waitingPlayers }) => {
-  gameState.gameId = gameId;
-  gameState.isHost = player.isHost;
-  gameState.gameMode = 'random';
-  gameState.players = game.players;
-  gameState.territories = game.territories;
-  gameState.currentPlayer = player;
-
-  // Update UI to show current matchmaking status
-  elements.randomPlayerName.disabled = true;
-  elements.findMatchBtn.style.display = 'none';
-  elements.findingMatchDiv.style.display = 'block';
-
-  // Update waiting players count if provided
-  if (waitingPlayers !== undefined) {
-    document.querySelector(
-      '#finding-match .waiting-message'
-    ).textContent = `Finding a match... (${waitingPlayers} player${
-      waitingPlayers !== 1 ? 's' : ''
-    } waiting)`;
-  }
-});
-
-// Match progress - will be emitted when we have at least 2 players but are waiting for more
-socket.on('matchProgress', ({ players, secondsRemaining }) => {
-  // Update the player list
-  updatePlayersList(elements.randomPlayersList, players);
-  document.querySelector('#finding-match .player-list').style.display = 'block';
-
-  // Show and update the countdown timer
-  if (!elements.matchCountdownContainer) {
-    // Create the countdown container if it doesn't exist
-    const countdownContainer = document.createElement('div');
-    countdownContainer.id = 'match-countdown-container';
-    countdownContainer.className = 'match-countdown-container';
-
-    const countdownDisplay = document.createElement('div');
-    countdownDisplay.id = 'match-countdown-display';
-    countdownDisplay.className = 'match-countdown-display';
-
-    countdownContainer.appendChild(document.createTextNode('Game starts in: '));
-    countdownContainer.appendChild(countdownDisplay);
-
-    elements.findingMatchDiv.appendChild(countdownContainer);
-
-    // Update our elements reference
-    elements.matchCountdownContainer = countdownContainer;
-    elements.matchCountdownDisplay = countdownDisplay;
-  }
-
-  // Show the countdown container
-  elements.matchCountdownContainer.style.display = 'block';
-
-  // Update the countdown display
-  elements.matchCountdownDisplay.textContent = secondsRemaining;
-
-  // Update waiting message based on player count
-  if (players.length >= 3) {
-    document.querySelector(
-      '#finding-match .waiting-message'
-    ).textContent = `Match full! Game starting soon...`;
-  } else {
-    document.querySelector(
-      '#finding-match .waiting-message'
-    ).textContent = `Match found! Waiting for more players to join... (${players.length}/3)`;
-  }
-});
-
-// Match found
-socket.on('matchFound', ({ gameId, player, game }) => {
-  gameState.gameId = gameId;
-  gameState.isHost = player.isHost;
-  gameState.gameMode = 'random';
-  gameState.players = game.players;
-  gameState.territories = game.territories;
-  gameState.currentPlayer = player;
-
-  // Update UI
-  document.querySelector('#finding-match .player-list').style.display = 'block';
-  updatePlayersList(elements.randomPlayersList, game.players);
-
-  // Update waiting message based on player count
-  if (game.players.length >= 3) {
-    document.querySelector(
-      '#finding-match .waiting-message'
-    ).textContent = `Match full! Game starting soon...`;
-  } else {
-    document.querySelector(
-      '#finding-match .waiting-message'
-    ).textContent = `Match found! Waiting for more players to join... (${game.players.length}/3)`;
-  }
-});
-
-// Matchmaking cancelled
-socket.on('matchmakingCancelled', () => {
-  // Reset UI
-  elements.randomPlayerName.disabled = false;
-  elements.findMatchBtn.style.display = 'block';
-  elements.findingMatchDiv.style.display = 'none';
-  document.querySelector('#finding-match .player-list').style.display = 'none';
-
-  // Reset game state
-  gameState.gameId = null;
-  gameState.isHost = false;
-  gameState.gameMode = null;
-  gameState.players = [];
-  gameState.currentPlayer = null;
-});
-
-// Add a CSS rule for the countdown display
-document.addEventListener('DOMContentLoaded', function () {
-  const style = document.createElement('style');
-  style.textContent = `
-    .match-countdown-container {
-      margin: 15px auto;
-      padding: 10px 15px;
-      background-color: #f3f3f3;
-      border-radius: 5px;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      font-weight: bold;
-    }
-    
-    .match-countdown-display {
-      display: inline-block;
-      margin-left: 5px;
-      color: #e74c3c;
-      font-size: 18px;
-      font-weight: bold;
-    }
-  `;
-  document.head.appendChild(style);
-});
-
-// Game over
-socket.on('gameOver', ({ players, reason }) => {
-  gameState.isActive = false;
-
-  // Add reason to display if needed
-  let reasonText = '';
-  if (reason === 'allCaptured') {
-    reasonText = 'All territories have been captured!';
-  } else if (reason === 'timeUp') {
-    reasonText = 'Time is up!';
-  } else if (reason === 'opponentsLeft') {
-    reasonText = 'Your opponents have left the game!';
-  }
-
-  // Show reason if available
-  if (reasonText) {
-    const reasonElement = document.createElement('p');
-    reasonElement.className = 'game-end-reason';
-    reasonElement.textContent = reasonText;
-    elements.finalScores.innerHTML = '';
-    elements.finalScores.appendChild(reasonElement);
-  }
-
-  endGame(players);
-});
-
-// Player left
-socket.on('playerLeft', ({ playerId, playerName, players }) => {
-  gameState.players = players;
-
-  // Update the player list
-  if (gameState.gameMode === 'create') {
-    updatePlayersList(elements.hostPlayersList, players);
-  } else if (gameState.gameMode === 'join') {
-    updatePlayersList(elements.guestPlayersList, players);
-  } else if (gameState.gameMode === 'random') {
-    updatePlayersList(elements.randomPlayersList, players);
-  }
-
-  if (gameState.isActive) {
-    updateScores();
-  }
-});
-
-// New host assigned
-socket.on('newHost', ({ playerId, playerName }) => {
-  const player = gameState.players.find((p) => p.id === playerId);
-  if (player) {
-    player.isHost = true;
-
-    // Update UI to show new host
-    if (playerId === gameState.currentPlayer.id) {
-      gameState.isHost = true;
-      // You are now the host
-      if (!gameState.isActive) {
-        elements.startGameBtn.style.display = 'block';
-      }
-    }
-
-    // Update the player list
-    if (gameState.gameMode === 'create') {
-      updatePlayersList(elements.hostPlayersList, gameState.players);
-    } else if (gameState.gameMode === 'join') {
-      updatePlayersList(elements.guestPlayersList, gameState.players);
-    } else if (gameState.gameMode === 'random') {
-      updatePlayersList(elements.randomPlayersList, gameState.players);
-    }
-  }
-});
-
-// Game ended
-socket.on('gameEnded', ({ reason }) => {
-  // Handle different reasons for game ending
-  let message = '';
-
-  switch (reason) {
-    case 'hostLeft':
-      message = 'The host left the game.';
-      break;
-    case 'cancelled':
-      message = 'The game was cancelled.';
-      break;
-    default:
-      message = 'The game has ended.';
-  }
-
-  if (!gameState.isActive) {
-    alert(message);
-
-    // Reset UI based on game mode
-    if (gameState.gameMode === 'join') {
-      elements.joinPlayerName.disabled = false;
-      elements.gameIdInput.disabled = false;
-      elements.joinGameButton.style.display = 'block';
-      elements.joinedGameDiv.style.display = 'none';
-    } else if (gameState.gameMode === 'random') {
-      elements.randomPlayerName.disabled = false;
-      elements.findMatchBtn.style.display = 'block';
-      elements.findingMatchDiv.style.display = 'none';
-      document.querySelector('#finding-match .player-list').style.display =
-        'none';
-    }
-
-    // Reset game state
-    gameState.gameId = null;
-    gameState.isHost = false;
-    gameState.gameMode = null;
-    gameState.players = [];
-    gameState.currentPlayer = null;
-  }
-});
-
-// Error messages
-socket.on('error', ({ message }) => {
-  alert(message);
-});
-
-// Initialize the game
-attachTerritoryEvents();

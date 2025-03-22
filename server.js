@@ -467,60 +467,6 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Update disconnect handler to handle matchmaking
-  // In the disconnect handler, add:
-  if (matchmakingPlayers.includes(socket.id)) {
-    // Remove player from matchmaking queue
-    const index = matchmakingPlayers.indexOf(socket.id);
-    if (index !== -1) {
-      matchmakingPlayers.splice(index, 1);
-      console.log(
-        `Player ${socket.id} removed from matchmaking due to disconnect`
-      );
-    }
-
-    // Check if we need to stop the checker
-    stopMatchmakingCheckerIfNeeded();
-
-    // Notify remaining players about the updated count
-    matchmakingPlayers.forEach((playerId) => {
-      const playerSocket = io.sockets.sockets.get(playerId);
-      if (playerSocket) {
-        playerSocket.emit('matchmaking', {
-          status: 'waiting',
-          waitingPlayers: matchmakingPlayers.length,
-        });
-      }
-    });
-  }
-
-  // Update disconnect handler to handle matchmaking
-  // In the disconnect handler, add:
-  if (matchmakingPlayers.includes(socket.id)) {
-    // Remove player from matchmaking queue
-    const index = matchmakingPlayers.indexOf(socket.id);
-    if (index !== -1) {
-      matchmakingPlayers.splice(index, 1);
-      console.log(
-        `Player ${socket.id} removed from matchmaking due to disconnect`
-      );
-    }
-
-    // Check if we need to stop the checker
-    stopMatchmakingCheckerIfNeeded();
-
-    // Notify remaining players about the updated count
-    matchmakingPlayers.forEach((playerId) => {
-      const playerSocket = io.sockets.sockets.get(playerId);
-      if (playerSocket) {
-        playerSocket.emit('matchmaking', {
-          status: 'waiting',
-          waitingPlayers: matchmakingPlayers.length,
-        });
-      }
-    });
-  }
-
   // Join game
   socket.on('joinGame', ({ gameId, playerName }) => {
     try {
@@ -624,41 +570,18 @@ io.on('connection', (socket) => {
         game.territories = createTerritories();
       }
 
+      // Reset any territory ownership at game start
+      game.territories.forEach((territory) => {
+        territory.owner = null;
+      });
+
+      // Reset player scores
+      game.players.forEach((player) => {
+        player.score = 0;
+      });
+
       // Start the game clock
-      logDebug('Starting game timer');
-
-      // Use a safer approach for the timer
-      let timerCounter = game.timeRemaining;
-      game.timer = setInterval(() => {
-        try {
-          timerCounter--;
-
-          if (timerCounter <= 0) {
-            clearInterval(game.timer);
-            game.status = 'ended';
-            game.timeRemaining = 0;
-
-            // Sort players by score and include typing speeds
-            const sortedPlayers = [...game.players]
-              .sort((a, b) => b.score - a.score)
-              .map((p) => ({
-                ...p,
-                avgTypingSpeed: p.avgTypingSpeed || 0,
-              }));
-
-            io.to(gameId).emit('gameOver', {
-              players: sortedPlayers,
-              reason: 'timeUp',
-            });
-          } else {
-            game.timeRemaining = timerCounter;
-            io.to(gameId).emit('timerUpdate', { timeRemaining: timerCounter });
-          }
-        } catch (timerError) {
-          console.error('Error in game timer:', timerError);
-          clearInterval(game.timer);
-        }
-      }, 1000);
+      startGameTimer(gameId);
 
       // Send a clean version of the game object to clients
       const clientGame = {
@@ -716,6 +639,19 @@ io.on('connection', (socket) => {
 
       const player = game.players.find((p) => p.id === socket.id);
       if (!player) return;
+
+      // Check if territory is already owned
+      if (territory.owner !== null) {
+        // Territory already claimed, notify player
+        socket.emit('territoryAlreadyClaimed', {
+          territoryId,
+          ownerId: territory.owner,
+          ownerName:
+            game.players.find((p) => p.id === territory.owner)?.name ||
+            'Another player',
+        });
+        return;
+      }
 
       // Save typing speed for the player (now in WPM instead of CPM)
       if (!player.typingSpeeds) {
@@ -779,13 +715,35 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Add the rest of your event handlers here with try-catch blocks
-  // ...
-
   // Handle disconnections
   socket.on('disconnect', () => {
     try {
       logDebug('Client disconnected:', socket.id);
+
+      // Remove player from matchmaking queue if they're in it
+      if (matchmakingPlayers.includes(socket.id)) {
+        const index = matchmakingPlayers.indexOf(socket.id);
+        if (index !== -1) {
+          matchmakingPlayers.splice(index, 1);
+          console.log(
+            `Player ${socket.id} removed from matchmaking due to disconnect`
+          );
+        }
+
+        // Check if we need to stop the checker
+        stopMatchmakingCheckerIfNeeded();
+
+        // Notify remaining players about the updated count
+        matchmakingPlayers.forEach((playerId) => {
+          const playerSocket = io.sockets.sockets.get(playerId);
+          if (playerSocket) {
+            playerSocket.emit('matchmaking', {
+              status: 'waiting',
+              waitingPlayers: matchmakingPlayers.length,
+            });
+          }
+        });
+      }
 
       if (socket.gameId && games[socket.gameId]) {
         const game = games[socket.gameId];
