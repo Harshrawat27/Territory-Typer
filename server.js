@@ -118,6 +118,7 @@ function checkForMatches() {
   }
 
   // Create a new game with the waiting players (up to 6 max)
+  // Always create a match if we have at least MIN_PLAYERS_TO_START players
   const playersForMatch = matchmakingPlayers.splice(0, 6);
   const gameId = generateGameId();
 
@@ -191,15 +192,15 @@ function startMatchCountdown(gameId) {
       // Decrease countdown
       game.countdownSeconds--;
 
+      console.log(
+        `Game ${gameId} countdown: ${game.countdownSeconds} seconds remaining`
+      );
+
       // Notify all players in the game about the countdown
       io.to(gameId).emit('matchProgress', {
         players: game.players,
         secondsRemaining: game.countdownSeconds,
       });
-
-      console.log(
-        `Game ${gameId} countdown: ${game.countdownSeconds} seconds remaining`
-      );
 
       // Check if it's time to start
       if (game.countdownSeconds <= 0) {
@@ -242,8 +243,6 @@ function startMatchCountdown(gameId) {
       }
     } catch (error) {
       console.error('Error in match countdown timer:', error);
-
-      // Clean up the timer on error
       clearInterval(game.matchStartTimer);
       game.matchStartTimer = null;
     }

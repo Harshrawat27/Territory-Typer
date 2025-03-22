@@ -151,13 +151,6 @@ function initTerritoryLabels() {
 
     if (elements.findingMatchDiv) {
       elements.findingMatchDiv.style.display = 'none';
-      // Update the waiting message in case it's still visible
-      const waitingMessage = document.querySelector(
-        '#finding-match .waiting-message'
-      );
-      if (waitingMessage) {
-        waitingMessage.textContent = 'Game starting...';
-      }
     }
 
     // Hide create game panel if visible
@@ -174,6 +167,7 @@ function initTerritoryLabels() {
     gameState.territories = game.territories;
     gameState.timeRemaining = game.timeRemaining;
     gameState.players = game.players; // Make sure to update players from the game object
+    gameState.isActive = true; // Important - set the game to active!
 
     console.log('Starting game with state:', {
       playerCount: gameState.players.length,
@@ -1220,9 +1214,14 @@ elements.startGameBtn.addEventListener('click', () => {
     gameId: gameState.gameId,
   });
 
+  // No need to check player count here - let the server decide
   if (gameState.isHost) {
     socket.emit('startGame', { gameId: gameState.gameId });
     console.log('Start game request sent to server');
+
+    // Add a loading indicator or message here if you want
+    elements.startGameBtn.textContent = 'Starting...';
+    elements.startGameBtn.disabled = true;
   } else {
     console.log('Not host, cannot start game');
   }
