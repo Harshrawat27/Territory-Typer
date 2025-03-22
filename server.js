@@ -265,9 +265,16 @@ io.on('connection', (socket) => {
             game.status = 'ended';
             game.timeRemaining = 0;
 
-            // Sort players by score and include typing speeds
+            // Sort players by score and typing speed when tied
             const sortedPlayers = [...game.players]
-              .sort((a, b) => b.score - a.score)
+              .sort((a, b) => {
+                // First compare territories
+                if (b.score !== a.score) {
+                  return b.score - a.score;
+                }
+                // If tied in territories, compare typing speeds
+                return (b.avgTypingSpeed || 0) - (a.avgTypingSpeed || 0);
+              })
               .map((p) => ({
                 ...p,
                 avgTypingSpeed: p.avgTypingSpeed || 0,
@@ -381,7 +388,7 @@ io.on('connection', (socket) => {
         clearInterval(game.timer);
         game.status = 'ended';
 
-        // Sort players by score
+        // Sort players by score, then by typing speed if tied
         const sortedPlayers = [...game.players]
           .sort((a, b) => {
             // First compare territories

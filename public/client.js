@@ -631,6 +631,16 @@ function endGame(players) {
     const winnerBanner = document.createElement('div');
     winnerBanner.className = 'winner-banner';
     winnerBanner.innerHTML = `🏆 <span style="color:${winner.color}">${winner.name}</span> wins with ${winner.score} territories! 🏆`;
+
+    // Add a note about tiebreaker if there are ties
+    const hasTies = players.filter((p) => p.score === winner.score).length > 1;
+    if (hasTies) {
+      const tieNote = document.createElement('div');
+      tieNote.className = 'winner-note';
+      tieNote.textContent = `Tied players ranked by typing speed (WPM)`;
+      winnerBanner.appendChild(tieNote);
+    }
+
     elements.finalScores.appendChild(winnerBanner);
   }
 
@@ -650,12 +660,24 @@ function endGame(players) {
   // Add player rows
   players.forEach((player, index) => {
     const playerRow = document.createElement('tr');
+
+    // Check for ties in territories
+    const isTied = index > 0 && player.score === players[index - 1].score;
+    const isTiedWinner =
+      index === 0 && players.length > 1 && player.score === players[1].score;
+
+    if (isTiedWinner) {
+      playerRow.className = 'tied-winner';
+    } else if (isTied) {
+      playerRow.className = 'tied';
+    }
+
     playerRow.innerHTML = `
-          <td>${index + 1}</td>
-          <td><span style="color:${player.color}">${player.name}</span></td>
-          <td>${player.score}</td>
-          <td>${player.avgTypingSpeed || 0} WPM</td>
-      `;
+        <td>${index + 1}</td>
+        <td><span style="color:${player.color}">${player.name}</span></td>
+        <td>${player.score}</td>
+        <td>${player.avgTypingSpeed || 0} WPM</td>
+    `;
     scoresTable.appendChild(playerRow);
   });
 
