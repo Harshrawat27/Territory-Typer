@@ -932,9 +932,28 @@ socket.on('playerJoined', ({ player, gameId, players }) => {
 
 // Game started
 socket.on('gameStarted', ({ game }) => {
+  // Hide any UI elements from the matchmaking that might still be visible
+  if (elements.matchCountdownContainer) {
+    elements.matchCountdownContainer.style.display = 'none';
+  }
+
+  if (elements.findingMatchDiv) {
+    // Update the waiting message in case it's still visible
+    const waitingMessage = document.querySelector(
+      '#finding-match .waiting-message'
+    );
+    if (waitingMessage) {
+      waitingMessage.textContent = 'Game starting...';
+    }
+  }
+
+  // Set the game state
   gameState.territories = game.territories;
   gameState.timeRemaining = game.timeRemaining;
 
+  console.log('Game started!');
+
+  // Initialize territory UI
   initTerritoryLabels();
   startGame();
 });
@@ -1044,10 +1063,16 @@ socket.on('matchProgress', ({ players, secondsRemaining }) => {
   // Update the countdown display
   elements.matchCountdownDisplay.textContent = secondsRemaining;
 
-  // Update waiting message
-  document.querySelector(
-    '#finding-match .waiting-message'
-  ).textContent = `Match found! Waiting for more players to join...`;
+  // Update waiting message based on player count
+  if (players.length >= 3) {
+    document.querySelector(
+      '#finding-match .waiting-message'
+    ).textContent = `Match full! Game starting soon...`;
+  } else {
+    document.querySelector(
+      '#finding-match .waiting-message'
+    ).textContent = `Match found! Waiting for more players to join... (${players.length}/3)`;
+  }
 });
 
 // Match found
@@ -1063,14 +1088,15 @@ socket.on('matchFound', ({ gameId, player, game }) => {
   document.querySelector('#finding-match .player-list').style.display = 'block';
   updatePlayersList(elements.randomPlayersList, game.players);
 
-  // Update waiting message
-  document.querySelector(
-    '#finding-match .waiting-message'
-  ).textContent = `Match found! ${game.players.length} players joined.`;
-
-  // Hide the countdown if it exists
-  if (elements.matchCountdownContainer) {
-    elements.matchCountdownContainer.style.display = 'none';
+  // Update waiting message based on player count
+  if (game.players.length >= 3) {
+    document.querySelector(
+      '#finding-match .waiting-message'
+    ).textContent = `Match full! Game starting soon...`;
+  } else {
+    document.querySelector(
+      '#finding-match .waiting-message'
+    ).textContent = `Match found! Waiting for more players to join... (${game.players.length}/3)`;
   }
 });
 
@@ -1115,6 +1141,7 @@ document.addEventListener('DOMContentLoaded', function () {
   `;
   document.head.appendChild(style);
 });
+
 // Game over
 socket.on('gameOver', ({ players, reason }) => {
   gameState.isActive = false;

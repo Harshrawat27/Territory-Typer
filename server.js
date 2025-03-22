@@ -57,16 +57,70 @@ function checkForMatches() {
 
   // Find games that are in the matching phase with a timer
   const matchingGames = Object.values(games).filter(
-    (game) => game.status === 'matching' && game.matchStartTimer !== undefined
+    (game) =>
+      game.status === 'matching' &&
+      game.matchStartTimer !== undefined &&
+      game.players.length < 3 // Limit to 3 players max
   );
 
-  // If there's already a game in matching phase, don't create a new one
+  // If there's a game in matching phase with less than 3 players, add new players to it
   if (matchingGames.length > 0) {
+    // Get the first matching game with space available
+    const game = matchingGames[0];
+
+    // Calculate how many more players we can add
+    const spotsAvailable = 3 - game.players.length;
+    if (spotsAvailable > 0) {
+      // Get players to add (up to available spots)
+      const playersToAdd = matchmakingPlayers.splice(0, spotsAvailable);
+
+      // Add each player to the game
+      playersToAdd.forEach((socketId) => {
+        const socket = io.sockets.sockets.get(socketId);
+        if (socket) {
+          const playerIndex = game.players.length;
+
+          // Create player object
+          const player = {
+            id: socketId,
+            name: socket.playerName || `Player ${playerIndex + 1}`,
+            score: 0,
+            color: getPlayerColor(playerIndex),
+            isHost: false, // Only the first player is host
+          };
+
+          // Add to game players
+          game.players.push(player);
+
+          // Add socket to room
+          socket.join(game.id);
+          socket.gameId = game.id;
+          socket.playerId = socketId;
+
+          // Notify the player
+          socket.emit('matchFound', {
+            gameId: game.id,
+            player: player,
+            game: game,
+          });
+        }
+      });
+
+      // Notify all players in the game about the new players
+      io.to(game.id).emit('matchProgress', {
+        players: game.players,
+        secondsRemaining: game.countdownSeconds,
+      });
+
+      console.log(
+        `Added ${playersToAdd.length} players to existing match ${game.id}`
+      );
+    }
     return;
   }
 
-  // Create a new game with the waiting players (up to 6)
-  const playersForMatch = matchmakingPlayers.splice(0, 6);
+  // Create a new game with the waiting players (up to 3 max)
+  const playersForMatch = matchmakingPlayers.splice(0, 3);
   const gameId = generateGameId();
 
   // Setup players for the game
@@ -122,32 +176,58 @@ function startMatchCountdown(gameId) {
 
   console.log(`Starting match countdown for game ${gameId}`);
 
+  // Initial notification
+  io.to(gameId).emit('matchProgress', {
+    players: game.players,
+    secondsRemaining: game.countdownSeconds,
+  });
+
   game.matchStartTimer = setInterval(() => {
-    // Decrease countdown
-    game.countdownSeconds--;
+    try {
+      // Decrease countdown
+      game.countdownSeconds--;
 
-    // Notify all players in the game about the countdown
-    io.to(gameId).emit('matchProgress', {
-      players: game.players,
-      secondsRemaining: game.countdownSeconds,
-    });
+      // Notify all players in the game about the countdown
+      io.to(gameId).emit('matchProgress', {
+        players: game.players,
+        secondsRemaining: game.countdownSeconds,
+      });
 
-    // Check if it's time to start
-    if (game.countdownSeconds <= 0) {
-      // Clear the timer
+      // Check if it's time to start
+      if (game.countdownSeconds <= 0) {
+        console.log(
+          `Match countdown finished for game ${gameId}. Starting game...`
+        );
+
+        // Clear the timer
+        clearInterval(game.matchStartTimer);
+        game.matchStartTimer = null;
+
+        // Start the game
+        game.status = 'playing';
+        game.timeRemaining = 180; // 3 minutes
+
+        // Prepare a clean game object for the client
+        const clientGame = {
+          id: game.id,
+          players: game.players,
+          territories: game.territories,
+          status: game.status,
+          timeRemaining: game.timeRemaining,
+        };
+
+        // Notify all players that the game has started
+        io.to(gameId).emit('gameStarted', { game: clientGame });
+
+        // Start the game timer
+        startGameTimer(gameId);
+      }
+    } catch (error) {
+      console.error('Error in match countdown timer:', error);
+
+      // Clean up the timer on error
       clearInterval(game.matchStartTimer);
-      delete game.matchStartTimer;
-      delete game.countdownSeconds;
-
-      // Start the game
-      game.status = 'playing';
-      game.timeRemaining = 180; // 3 minutes
-
-      // Start the game timer
-      startGameTimer(gameId);
-
-      // Notify all players that the game has started
-      io.to(gameId).emit('gameStarted', { game });
+      game.matchStartTimer = null;
     }
   }, 1000);
 }
@@ -197,7 +277,7 @@ function createTerritories() {
       id: 'north-america',
       name: 'North America',
       phrase:
-        'North America is a diverse continent with vast landscapes, from the Arctic tundra of Canada to the tropical beaches of the Caribbean. It is home to the United States, Canada, and Mexico, along with several smaller nations. The continent is known for its economic power, cultural influence, and natural wonders like the Grand Canyon.',
+        'Diverse lands from Arctic tundra to Caribbean coasts. USA, Canada, Mexico lead in economy, culture & wonders.',
       owner: null,
       x: 180,
       y: 150,
@@ -206,7 +286,7 @@ function createTerritories() {
       id: 'south-america',
       name: 'South America',
       phrase:
-        'South America is rich in biodiversity, featuring the Amazon Rainforest, the Andes Mountains, and unique wildlife. It consists of countries like Brazil, Argentina, and Colombia, each with distinct cultures and traditions. Known for football passion, vibrant festivals, and ancient civilizations like the Inca, it has a deep historical heritage.',
+        'Andes, Amazon, vibrant festivals & football passion. Brazil, Argentina, Colombia hold deep history & Inca legacy.',
       owner: null,
       x: 220,
       y: 290,
@@ -215,7 +295,7 @@ function createTerritories() {
       id: 'europe',
       name: 'Europe',
       phrase:
-        'Europe blends history and modernity, featuring iconic landmarks such as the Eiffel Tower, Colosseum, and Buckingham Palace. Comprising nations like France, Germany, and Spain, it has a rich cultural heritage, diverse languages, and economic strength. The continent has influenced global politics, art, and science for centuries.',
+        'Blend of history, technology & iconic landmarks. France, Germany, Spain drive culture, economy & global influence.',
       owner: null,
       x: 450,
       y: 130,
@@ -224,7 +304,7 @@ function createTerritories() {
       id: 'africa',
       name: 'Africa',
       phrase:
-        'Africa is the second-largest continent, known for its diverse cultures, wildlife, and landscapes. From the Sahara Desert to the Serengeti, it holds vast natural beauty. It is home to over 50 nations, including Nigeria, Egypt, and South Africa. Rich in history, Africa has ancient civilizations like Egypt and a strong cultural heritage.',
+        'Vast landscapes from Sahara to Serengeti. Nigeria, Egypt, South Africa shaped by ancient civilizations & heritage.',
       owner: null,
       x: 450,
       y: 250,
@@ -233,7 +313,7 @@ function createTerritories() {
       id: 'asia',
       name: 'Asia',
       phrase:
-        "Asia, the largest continent, is home to over four billion people and some of the world's oldest civilizations, including China and India. It has diverse landscapes, from the Himalayas to tropical islands. Economically powerful, it leads in technology and manufacturing. Asia's cultural influence is vast, with traditions spanning thousands of years.",
+        'Largest, most populated & diverse. China, India, Japan lead in ancient traditions, economy, tech & innovation.',
       owner: null,
       x: 600,
       y: 180,
@@ -242,7 +322,7 @@ function createTerritories() {
       id: 'oceania',
       name: 'Oceania',
       phrase:
-        "Oceania consists of Australia, New Zealand, and Pacific island nations such as Fiji and Papua New Guinea. It is famous for the Great Barrier Reef, indigenous cultures, and unique wildlife. The region has stunning beaches, diverse ecosystems, and a strong connection to nature. Oceania's cultural identity is shaped by its island heritage.",
+        'Australia, New Zealand & Pacific islands. Unique wildlife, Great Barrier Reef & rich indigenous traditions thrive.',
       owner: null,
       x: 720,
       y: 310,
@@ -251,7 +331,7 @@ function createTerritories() {
       id: 'antarctica',
       name: 'Antarctica',
       phrase:
-        "Antarctica is Earth's coldest and most remote continent, covered in ice year-round. It has no permanent population, only scientists conducting research. Home to penguins, seals, and whales, it plays a crucial role in climate studies. Antarctica's extreme conditions make it one of the least explored and most fascinating places on the planet.",
+        'Coldest, most remote & uninhabited. No cities, only scientists. Key for climate research, home to penguins & ice.',
       owner: null,
       x: 450,
       y: 420,
@@ -386,6 +466,33 @@ io.on('connection', (socket) => {
       console.error('Error in cancelMatchmaking:', error);
     }
   });
+
+  // Update disconnect handler to handle matchmaking
+  // In the disconnect handler, add:
+  if (matchmakingPlayers.includes(socket.id)) {
+    // Remove player from matchmaking queue
+    const index = matchmakingPlayers.indexOf(socket.id);
+    if (index !== -1) {
+      matchmakingPlayers.splice(index, 1);
+      console.log(
+        `Player ${socket.id} removed from matchmaking due to disconnect`
+      );
+    }
+
+    // Check if we need to stop the checker
+    stopMatchmakingCheckerIfNeeded();
+
+    // Notify remaining players about the updated count
+    matchmakingPlayers.forEach((playerId) => {
+      const playerSocket = io.sockets.sockets.get(playerId);
+      if (playerSocket) {
+        playerSocket.emit('matchmaking', {
+          status: 'waiting',
+          waitingPlayers: matchmakingPlayers.length,
+        });
+      }
+    });
+  }
 
   // Update disconnect handler to handle matchmaking
   // In the disconnect handler, add:
