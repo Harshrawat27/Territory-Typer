@@ -27,7 +27,7 @@ function createTerritories() {
       id: 'north-america',
       name: 'North America',
       phrase:
-        'North America is a diverse continent with vast landscapes, from the Arctic tundra of Canada to the tropical beaches of the Caribbean. It is home to the United States, Canada, and Mexico, along with several smaller nations.',
+        'North America is a diverse continent with vast landscapes, from the Arctic tundra of Canada to the tropical beaches of the Caribbean. It is home to the United States, Canada, and Mexico, along with several smaller nations. The continent is known for its economic power, cultural influence, and natural wonders like the Grand Canyon.',
       owner: null,
       x: 180,
       y: 150,
@@ -36,7 +36,7 @@ function createTerritories() {
       id: 'south-america',
       name: 'South America',
       phrase:
-        'South America is rich in biodiversity, featuring the Amazon Rainforest, the Andes Mountains, and unique wildlife. It consists of countries like Brazil, Argentina, and Colombia, each with distinct cultures and traditions.',
+        'South America is rich in biodiversity, featuring the Amazon Rainforest, the Andes Mountains, and unique wildlife. It consists of countries like Brazil, Argentina, and Colombia, each with distinct cultures and traditions. Known for football passion, vibrant festivals, and ancient civilizations like the Inca, it has a deep historical heritage.',
       owner: null,
       x: 220,
       y: 290,
@@ -45,7 +45,7 @@ function createTerritories() {
       id: 'europe',
       name: 'Europe',
       phrase:
-        'Europe blends history and modernity, featuring iconic landmarks such as the Eiffel Tower, Colosseum, and Buckingham Palace. Comprising nations like France, Germany, and Spain, it has a rich cultural heritage, diverse languages, and economic strength.',
+        'Europe blends history and modernity, featuring iconic landmarks such as the Eiffel Tower, Colosseum, and Buckingham Palace. Comprising nations like France, Germany, and Spain, it has a rich cultural heritage, diverse languages, and economic strength. The continent has influenced global politics, art, and science for centuries.',
       owner: null,
       x: 450,
       y: 130,
@@ -54,7 +54,7 @@ function createTerritories() {
       id: 'africa',
       name: 'Africa',
       phrase:
-        'Africa is the second-largest continent, known for its diverse cultures, wildlife, and landscapes. From the Sahara Desert to the Serengeti, it holds vast natural beauty. It is home to over 50 nations, including Nigeria, Egypt, and South Africa.',
+        'Africa is the second-largest continent, known for its diverse cultures, wildlife, and landscapes. From the Sahara Desert to the Serengeti, it holds vast natural beauty. It is home to over 50 nations, including Nigeria, Egypt, and South Africa. Rich in history, Africa has ancient civilizations like Egypt and a strong cultural heritage.',
       owner: null,
       x: 450,
       y: 250,
@@ -63,7 +63,7 @@ function createTerritories() {
       id: 'asia',
       name: 'Asia',
       phrase:
-        "Asia, the largest continent, is home to over four billion people and some of the world's oldest civilizations, including China and India. It has diverse landscapes, from the Himalayas to tropical islands.",
+        "Asia, the largest continent, is home to over four billion people and some of the world's oldest civilizations, including China and India. It has diverse landscapes, from the Himalayas to tropical islands. Economically powerful, it leads in technology and manufacturing. Asia's cultural influence is vast, with traditions spanning thousands of years.",
       owner: null,
       x: 600,
       y: 180,
@@ -72,7 +72,7 @@ function createTerritories() {
       id: 'oceania',
       name: 'Oceania',
       phrase:
-        'Oceania consists of Australia, New Zealand, and Pacific island nations such as Fiji and Papua New Guinea. It is famous for the Great Barrier Reef, indigenous cultures, and unique wildlife.',
+        "Oceania consists of Australia, New Zealand, and Pacific island nations such as Fiji and Papua New Guinea. It is famous for the Great Barrier Reef, indigenous cultures, and unique wildlife. The region has stunning beaches, diverse ecosystems, and a strong connection to nature. Oceania's cultural identity is shaped by its island heritage.",
       owner: null,
       x: 720,
       y: 310,
@@ -81,7 +81,7 @@ function createTerritories() {
       id: 'antarctica',
       name: 'Antarctica',
       phrase:
-        "Antarctica is Earth's coldest and most remote continent, covered in ice year-round. It has no permanent population, only scientists conducting research. Home to penguins, seals, and whales, it plays a crucial role in climate studies.",
+        "Antarctica is Earth's coldest and most remote continent, covered in ice year-round. It has no permanent population, only scientists conducting research. Home to penguins, seals, and whales, it plays a crucial role in climate studies. Antarctica's extreme conditions make it one of the least explored and most fascinating places on the planet.",
       owner: null,
       x: 450,
       y: 420,
@@ -126,8 +126,6 @@ io.on('connection', (socket) => {
         score: 0,
         color: getPlayerColor(0),
         isHost: true,
-        typingSpeeds: [], // Add this line to track all typing attempts
-        avgTypingSpeed: 0, // Add this to initialize average typing speed
       };
 
       games[gameId] = {
@@ -195,8 +193,6 @@ io.on('connection', (socket) => {
         score: 0,
         color: getPlayerColor(game.players.length),
         isHost: false,
-        typingSpeeds: [], // Add this line
-        avgTypingSpeed: 0, // Add this line
       };
 
       game.players.push(player);
@@ -271,14 +267,7 @@ io.on('connection', (socket) => {
 
             // Sort players by score and include typing speeds
             const sortedPlayers = [...game.players]
-              .sort((a, b) => {
-                // First compare territories
-                if (b.score !== a.score) {
-                  return b.score - a.score;
-                }
-                // If tied in territories, compare typing speeds
-                return (b.avgTypingSpeed || 0) - (a.avgTypingSpeed || 0);
-              })
+              .sort((a, b) => b.score - a.score)
               .map((p) => ({
                 ...p,
                 avgTypingSpeed: p.avgTypingSpeed || 0,
@@ -343,200 +332,6 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on(
-    'typingAttempt',
-    ({ gameId, territoryId, typingSpeed, completed }) => {
-      try {
-        if (!games[gameId] || games[gameId].status !== 'playing') return;
-
-        const game = games[gameId];
-        const player = game.players.find((p) => p.id === socket.id);
-        if (!player) return;
-
-        // Initialize typingSpeeds array if it doesn't exist
-        if (!player.typingSpeeds) {
-          player.typingSpeeds = [];
-        }
-
-        // Add this typing speed to the player's record
-        // You might want to weight completed attempts more heavily
-        if (completed) {
-          // For completed attempts, add normally
-          player.typingSpeeds.push(typingSpeed);
-        } else {
-          // For partial attempts, you could adjust the weight
-          // Here we give partial attempts 75% weight
-          player.typingSpeeds.push(typingSpeed * 0.75);
-        }
-
-        // Calculate average typing speed
-        const avgSpeed =
-          player.typingSpeeds.reduce((sum, speed) => sum + speed, 0) /
-          player.typingSpeeds.length;
-        player.avgTypingSpeed = Math.round(avgSpeed);
-
-        // No need to broadcast this to other players
-        // But you could if you want to update leaderboards in real-time
-      } catch (error) {
-        console.error('Error tracking typing attempt:', error);
-      }
-    }
-  );
-
-  // Add these changes to your server.js file to handle matchmaking
-  // This should be added to the socket.io connection handler section
-
-  // Find Match - Random matchmaking
-  socket.on('findMatch', ({ playerName }) => {
-    try {
-      // Create player object with typing speed tracking
-      const player = {
-        id: socket.id,
-        name: playerName,
-        score: 0,
-        color: getPlayerColor(0),
-        isHost: false, // Will be set to true if the player creates a new game
-        typingSpeeds: [], // Add this for typing speed tracking
-        avgTypingSpeed: 0, // Initialize average typing speed
-      };
-
-      // If there are waiting games, join one
-      if (waitingGames.length > 0) {
-        const gameId = waitingGames.shift();
-        const game = games[gameId];
-
-        if (game && game.status === 'waiting') {
-          // Set player color based on existing players
-          player.color = getPlayerColor(game.players.length);
-
-          // Add to game
-          game.players.push(player);
-
-          socket.join(gameId);
-          socket.gameId = gameId;
-          socket.playerId = player.id;
-
-          // Notify player and others
-          socket.emit('matchFound', { gameId, player, game });
-          socket.to(gameId).emit('playerJoined', {
-            player,
-            gameId,
-            players: game.players,
-          });
-
-          // If game is full (2+ players), auto-start after countdown
-          if (game.players.length >= 2) {
-            // Remove from waiting list if it's still there
-            const index = waitingGames.indexOf(gameId);
-            if (index !== -1) {
-              waitingGames.splice(index, 1);
-            }
-
-            // Start countdown to begin game - this could be a separate mechanism
-            setTimeout(() => {
-              if (games[gameId] && games[gameId].status === 'waiting') {
-                // Start the game
-                // Similar to your startGame handler
-                games[gameId].status = 'playing';
-                games[gameId].timeRemaining = 180; // 3 minutes
-
-                // Start the game timer (similar to your existing code)
-
-                // Send game started event
-                const clientGame = {
-                  id: game.id,
-                  players: game.players,
-                  territories: game.territories,
-                  status: game.status,
-                  timeRemaining: game.timeRemaining,
-                };
-
-                io.to(gameId).emit('gameStarted', { game: clientGame });
-              }
-            }, 5000); // 5 second countdown before auto-starting
-          }
-        } else {
-          // Game not valid, create a new one
-          createNewMatchmakingGame(socket, player);
-        }
-      } else {
-        // No waiting games, create a new one
-        createNewMatchmakingGame(socket, player);
-      }
-    } catch (error) {
-      console.error('Error in matchmaking:', error);
-      socket.emit('error', {
-        message: 'Matchmaking failed. Please try again.',
-      });
-    }
-  });
-
-  // Helper function to create a new game for matchmaking
-  function createNewMatchmakingGame(socket, player) {
-    const gameId = generateGameId();
-
-    // Set player as host of new game
-    player.isHost = true;
-
-    // Create game
-    games[gameId] = {
-      id: gameId,
-      players: [player],
-      status: 'waiting',
-      territories: createTerritories(),
-      createdAt: Date.now(),
-    };
-
-    // Add to waiting games
-    waitingGames.push(gameId);
-
-    socket.join(gameId);
-    socket.gameId = gameId;
-    socket.playerId = player.id;
-
-    // Notify player
-    socket.emit('matchmaking', {
-      gameId,
-      player,
-      game: games[gameId],
-      status: 'waiting',
-    });
-  }
-
-  // Cancel matchmaking
-  socket.on('cancelMatchmaking', () => {
-    try {
-      if (socket.gameId && games[socket.gameId]) {
-        const game = games[socket.gameId];
-        const player = game.players.find((p) => p.id === socket.id);
-
-        if (player && player.isHost && game.status === 'waiting') {
-          // Remove game from waiting list
-          const index = waitingGames.indexOf(socket.gameId);
-          if (index !== -1) {
-            waitingGames.splice(index, 1);
-          }
-
-          // Notify other players
-          socket.to(socket.gameId).emit('matchmakingCancelled');
-
-          // Remove the game
-          delete games[socket.gameId];
-        }
-
-        // Leave the room
-        socket.leave(socket.gameId);
-        socket.gameId = null;
-        socket.playerId = null;
-
-        // Notify this player
-        socket.emit('matchmakingCancelled');
-      }
-    } catch (error) {
-      console.error('Error cancelling matchmaking:', error);
-    }
-  });
-
   // Territory claimed
   socket.on('claimTerritory', ({ gameId, territoryId, typingSpeed }) => {
     try {
@@ -549,7 +344,7 @@ io.on('connection', (socket) => {
       const player = game.players.find((p) => p.id === socket.id);
       if (!player) return;
 
-      // Save typing speed for the player (now in WPM)
+      // Save typing speed for the player (now in WPM instead of CPM)
       if (!player.typingSpeeds) {
         player.typingSpeeds = [];
       }
@@ -586,7 +381,7 @@ io.on('connection', (socket) => {
         clearInterval(game.timer);
         game.status = 'ended';
 
-        // Sort players by score and then by typing speed for tie-breaking
+        // Sort players by score
         const sortedPlayers = [...game.players]
           .sort((a, b) => {
             // First compare territories
@@ -610,6 +405,9 @@ io.on('connection', (socket) => {
       console.error('Error claiming territory:', error);
     }
   });
+
+  // Add the rest of your event handlers here with try-catch blocks
+  // ...
 
   // Handle disconnections
   socket.on('disconnect', () => {
