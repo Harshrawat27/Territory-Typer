@@ -8,6 +8,12 @@ const app = express();
 const server = http.createServer(app);
 const io = socketIo(server);
 
+const matchmakingPlayers = []; // Array to hold players looking for a match
+let matchmakingCheckInterval = null; // Reference to the interval that checks for matches
+const MIN_PLAYERS_TO_START = 2; // Minimum players needed to start a game
+const MATCHMAKING_CHECK_INTERVAL = 2000; // Check for matches every 2 seconds
+const MATCH_COUNTDOWN_SECONDS = 30;
+
 // Serve static files from public folder
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -18,6 +24,170 @@ const waitingGames = [];
 // Debug logging helper
 function logDebug(message, data = null) {
   console.log(`[DEBUG] ${message}`, data ? JSON.stringify(data) : '');
+}
+
+function startMatchmakingChecker() {
+  if (!matchmakingCheckInterval) {
+    matchmakingCheckInterval = setInterval(
+      checkForMatches,
+      MATCHMAKING_CHECK_INTERVAL
+    );
+    console.log('Matchmaking checker started');
+  }
+}
+
+// Stop the matchmaking checker if no players are waiting
+function stopMatchmakingCheckerIfNeeded() {
+  if (matchmakingCheckInterval && matchmakingPlayers.length === 0) {
+    clearInterval(matchmakingCheckInterval);
+    matchmakingCheckInterval = null;
+    console.log('Matchmaking checker stopped - no players waiting');
+  }
+}
+
+function checkForMatches() {
+  // If we don't have enough players for a match, just return
+  if (matchmakingPlayers.length < MIN_PLAYERS_TO_START) {
+    return;
+  }
+
+  console.log(
+    `Checking for matches with ${matchmakingPlayers.length} players waiting`
+  );
+
+  // Find games that are in the matching phase with a timer
+  const matchingGames = Object.values(games).filter(
+    (game) => game.status === 'matching' && game.matchStartTimer !== undefined
+  );
+
+  // If there's already a game in matching phase, don't create a new one
+  if (matchingGames.length > 0) {
+    return;
+  }
+
+  // Create a new game with the waiting players (up to 6)
+  const playersForMatch = matchmakingPlayers.splice(0, 6);
+  const gameId = generateGameId();
+
+  // Setup players for the game
+  const gamePlayers = playersForMatch.map((socketId, index) => {
+    return {
+      id: socketId,
+      name:
+        io.sockets.sockets.get(socketId).playerName || `Player ${index + 1}`,
+      score: 0,
+      color: getPlayerColor(index),
+      isHost: index === 0, // First player is the host
+    };
+  });
+
+  // Create the game
+  games[gameId] = {
+    id: gameId,
+    players: gamePlayers,
+    status: 'matching', // Use 'matching' status while waiting for more players
+    territories: createTerritories(),
+    createdAt: Date.now(),
+    matchStartTime: Date.now() + MATCH_COUNTDOWN_SECONDS * 1000,
+    countdownSeconds: MATCH_COUNTDOWN_SECONDS,
+  };
+
+  // Setup room and notify players
+  playersForMatch.forEach((socketId, index) => {
+    const socket = io.sockets.sockets.get(socketId);
+    if (socket) {
+      socket.join(gameId);
+      socket.gameId = gameId;
+      socket.playerId = socketId;
+
+      // Notify the player
+      socket.emit('matchFound', {
+        gameId,
+        player: gamePlayers[index],
+        game: games[gameId],
+      });
+    }
+  });
+
+  // Start the countdown timer for this game
+  startMatchCountdown(gameId);
+
+  console.log(`Created match ${gameId} with ${playersForMatch.length} players`);
+}
+
+// Start a countdown for a match that has reached minimum players
+function startMatchCountdown(gameId) {
+  const game = games[gameId];
+  if (!game) return;
+
+  console.log(`Starting match countdown for game ${gameId}`);
+
+  game.matchStartTimer = setInterval(() => {
+    // Decrease countdown
+    game.countdownSeconds--;
+
+    // Notify all players in the game about the countdown
+    io.to(gameId).emit('matchProgress', {
+      players: game.players,
+      secondsRemaining: game.countdownSeconds,
+    });
+
+    // Check if it's time to start
+    if (game.countdownSeconds <= 0) {
+      // Clear the timer
+      clearInterval(game.matchStartTimer);
+      delete game.matchStartTimer;
+      delete game.countdownSeconds;
+
+      // Start the game
+      game.status = 'playing';
+      game.timeRemaining = 180; // 3 minutes
+
+      // Start the game timer
+      startGameTimer(gameId);
+
+      // Notify all players that the game has started
+      io.to(gameId).emit('gameStarted', { game });
+    }
+  }, 1000);
+}
+
+// Start game timer (refactored from existing code)
+function startGameTimer(gameId) {
+  const game = games[gameId];
+  if (!game) return;
+
+  let timerCounter = game.timeRemaining;
+  game.timer = setInterval(() => {
+    try {
+      timerCounter--;
+
+      if (timerCounter <= 0) {
+        clearInterval(game.timer);
+        game.status = 'ended';
+        game.timeRemaining = 0;
+
+        // Sort players by score and include typing speeds
+        const sortedPlayers = [...game.players]
+          .sort((a, b) => b.score - a.score)
+          .map((p) => ({
+            ...p,
+            avgTypingSpeed: p.avgTypingSpeed || 0,
+          }));
+
+        io.to(gameId).emit('gameOver', {
+          players: sortedPlayers,
+          reason: 'timeUp',
+        });
+      } else {
+        game.timeRemaining = timerCounter;
+        io.to(gameId).emit('timerUpdate', { timeRemaining: timerCounter });
+      }
+    } catch (timerError) {
+      console.error('Error in game timer:', timerError);
+      clearInterval(game.timer);
+    }
+  }, 1000);
 }
 
 // Create initial territories data
@@ -147,6 +317,102 @@ io.on('connection', (socket) => {
       socket.emit('error', { message: 'Failed to create game' });
     }
   });
+
+  // Find match handler
+  socket.on('findMatch', ({ playerName }) => {
+    try {
+      // Store player name for later use
+      socket.playerName = playerName;
+
+      // Add this player to the matchmaking queue
+      matchmakingPlayers.push(socket.id);
+
+      // Start the matchmaking checker if needed
+      startMatchmakingChecker();
+
+      // Notify the player that matchmaking has started
+      socket.emit('matchmaking', {
+        status: 'waiting',
+        waitingPlayers: matchmakingPlayers.length,
+      });
+
+      console.log(
+        `Player ${playerName} (${socket.id}) joined matchmaking queue`
+      );
+
+      // Broadcast to all players in matchmaking about the updated count
+      matchmakingPlayers.forEach((playerId) => {
+        const playerSocket = io.sockets.sockets.get(playerId);
+        if (playerSocket && playerId !== socket.id) {
+          playerSocket.emit('matchmaking', {
+            status: 'waiting',
+            waitingPlayers: matchmakingPlayers.length,
+          });
+        }
+      });
+    } catch (error) {
+      console.error('Error in findMatch:', error);
+      socket.emit('error', { message: 'Failed to start matchmaking' });
+    }
+  });
+
+  // Cancel matchmaking
+  socket.on('cancelMatchmaking', () => {
+    try {
+      // Remove player from matchmaking queue
+      const index = matchmakingPlayers.indexOf(socket.id);
+      if (index !== -1) {
+        matchmakingPlayers.splice(index, 1);
+        console.log(`Player ${socket.id} cancelled matchmaking`);
+      }
+
+      // Check if we need to stop the checker
+      stopMatchmakingCheckerIfNeeded();
+
+      // Notify the player
+      socket.emit('matchmakingCancelled');
+
+      // Notify remaining players about the updated count
+      matchmakingPlayers.forEach((playerId) => {
+        const playerSocket = io.sockets.sockets.get(playerId);
+        if (playerSocket) {
+          playerSocket.emit('matchmaking', {
+            status: 'waiting',
+            waitingPlayers: matchmakingPlayers.length,
+          });
+        }
+      });
+    } catch (error) {
+      console.error('Error in cancelMatchmaking:', error);
+    }
+  });
+
+  // Update disconnect handler to handle matchmaking
+  // In the disconnect handler, add:
+  if (matchmakingPlayers.includes(socket.id)) {
+    // Remove player from matchmaking queue
+    const index = matchmakingPlayers.indexOf(socket.id);
+    if (index !== -1) {
+      matchmakingPlayers.splice(index, 1);
+      console.log(
+        `Player ${socket.id} removed from matchmaking due to disconnect`
+      );
+    }
+
+    // Check if we need to stop the checker
+    stopMatchmakingCheckerIfNeeded();
+
+    // Notify remaining players about the updated count
+    matchmakingPlayers.forEach((playerId) => {
+      const playerSocket = io.sockets.sockets.get(playerId);
+      if (playerSocket) {
+        playerSocket.emit('matchmaking', {
+          status: 'waiting',
+          waitingPlayers: matchmakingPlayers.length,
+        });
+      }
+    });
+  }
 
   // Join game
   socket.on('joinGame', ({ gameId, playerName }) => {

@@ -22,6 +22,8 @@ const gameState = {
   gameId: null,
   isHost: false,
   gameMode: null,
+  matchmakingTimer: null,
+  matchCountdown: 30,
 };
 
 // Typing speed tracking
@@ -62,6 +64,8 @@ const elements = {
   findingMatchDiv: document.getElementById('finding-match'),
   cancelMatchmakingBtn: document.getElementById('cancel-matchmaking'),
   randomPlayersList: document.getElementById('random-players-list'),
+  matchCountdownDisplay: document.getElementById('match-countdown-display'),
+  matchCountdownContainer: document.getElementById('match-countdown-container'),
 
   // Game elements
   mapContainer: document.getElementById('map-container'),
@@ -813,6 +817,11 @@ elements.findMatchBtn.addEventListener('click', () => {
 
   // Send find match request to server
   socket.emit('findMatch', { playerName });
+
+  // Update UI immediately to show waiting state
+  elements.randomPlayerName.disabled = true;
+  elements.findMatchBtn.style.display = 'none';
+  elements.findingMatchDiv.style.display = 'block';
 });
 
 // Cancel matchmaking
@@ -979,7 +988,7 @@ socket.on(
 );
 
 // Matchmaking
-socket.on('matchmaking', ({ gameId, player, game, status }) => {
+socket.on('matchmaking', ({ gameId, player, game, status, waitingPlayers }) => {
   gameState.gameId = gameId;
   gameState.isHost = player.isHost;
   gameState.gameMode = 'random';
@@ -987,10 +996,58 @@ socket.on('matchmaking', ({ gameId, player, game, status }) => {
   gameState.territories = game.territories;
   gameState.currentPlayer = player;
 
-  // Update UI
+  // Update UI to show current matchmaking status
   elements.randomPlayerName.disabled = true;
   elements.findMatchBtn.style.display = 'none';
   elements.findingMatchDiv.style.display = 'block';
+
+  // Update waiting players count if provided
+  if (waitingPlayers !== undefined) {
+    document.querySelector(
+      '#finding-match .waiting-message'
+    ).textContent = `Finding a match... (${waitingPlayers} player${
+      waitingPlayers !== 1 ? 's' : ''
+    } waiting)`;
+  }
+});
+
+// Match progress - will be emitted when we have at least 2 players but are waiting for more
+socket.on('matchProgress', ({ players, secondsRemaining }) => {
+  // Update the player list
+  updatePlayersList(elements.randomPlayersList, players);
+  document.querySelector('#finding-match .player-list').style.display = 'block';
+
+  // Show and update the countdown timer
+  if (!elements.matchCountdownContainer) {
+    // Create the countdown container if it doesn't exist
+    const countdownContainer = document.createElement('div');
+    countdownContainer.id = 'match-countdown-container';
+    countdownContainer.className = 'match-countdown-container';
+
+    const countdownDisplay = document.createElement('div');
+    countdownDisplay.id = 'match-countdown-display';
+    countdownDisplay.className = 'match-countdown-display';
+
+    countdownContainer.appendChild(document.createTextNode('Game starts in: '));
+    countdownContainer.appendChild(countdownDisplay);
+
+    elements.findingMatchDiv.appendChild(countdownContainer);
+
+    // Update our elements reference
+    elements.matchCountdownContainer = countdownContainer;
+    elements.matchCountdownDisplay = countdownDisplay;
+  }
+
+  // Show the countdown container
+  elements.matchCountdownContainer.style.display = 'block';
+
+  // Update the countdown display
+  elements.matchCountdownDisplay.textContent = secondsRemaining;
+
+  // Update waiting message
+  document.querySelector(
+    '#finding-match .waiting-message'
+  ).textContent = `Match found! Waiting for more players to join...`;
 });
 
 // Match found
@@ -1005,6 +1062,16 @@ socket.on('matchFound', ({ gameId, player, game }) => {
   // Update UI
   document.querySelector('#finding-match .player-list').style.display = 'block';
   updatePlayersList(elements.randomPlayersList, game.players);
+
+  // Update waiting message
+  document.querySelector(
+    '#finding-match .waiting-message'
+  ).textContent = `Match found! ${game.players.length} players joined.`;
+
+  // Hide the countdown if it exists
+  if (elements.matchCountdownContainer) {
+    elements.matchCountdownContainer.style.display = 'none';
+  }
 });
 
 // Matchmaking cancelled
@@ -1023,6 +1090,31 @@ socket.on('matchmakingCancelled', () => {
   gameState.currentPlayer = null;
 });
 
+// Add a CSS rule for the countdown display
+document.addEventListener('DOMContentLoaded', function () {
+  const style = document.createElement('style');
+  style.textContent = `
+    .match-countdown-container {
+      margin: 15px auto;
+      padding: 10px 15px;
+      background-color: #f3f3f3;
+      border-radius: 5px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-weight: bold;
+    }
+    
+    .match-countdown-display {
+      display: inline-block;
+      margin-left: 5px;
+      color: #e74c3c;
+      font-size: 18px;
+      font-weight: bold;
+    }
+  `;
+  document.head.appendChild(style);
+});
 // Game over
 socket.on('gameOver', ({ players, reason }) => {
   gameState.isActive = false;
