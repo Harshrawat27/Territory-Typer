@@ -55,24 +55,22 @@ function checkForMatches() {
     `Checking for matches with ${matchmakingPlayers.length} players waiting`
   );
 
-  // Find games that are in the matching phase with a timer
+  // First check if we can add players to an existing game in 'matching' status
   const matchingGames = Object.values(games).filter(
-    (game) =>
-      game.status === 'matching' &&
-      game.matchStartTimer !== undefined &&
-      game.players.length < 3 // Limit to 3 players max
+    (g) => g.status === 'matching' && g.players.length < 6
   );
 
-  // If there's a game in matching phase with less than 3 players, add new players to it
   if (matchingGames.length > 0) {
-    // Get the first matching game with space available
+    // Add players to the first matching game
     const game = matchingGames[0];
+    const spotsAvailable = 6 - game.players.length; // Max 6 players per game
 
-    // Calculate how many more players we can add
-    const spotsAvailable = 3 - game.players.length;
     if (spotsAvailable > 0) {
       // Get players to add (up to available spots)
       const playersToAdd = matchmakingPlayers.splice(0, spotsAvailable);
+      console.log(
+        `Adding ${playersToAdd.length} more players to existing match ${game.id}`
+      );
 
       // Add each player to the game
       playersToAdd.forEach((socketId) => {
@@ -113,15 +111,19 @@ function checkForMatches() {
       });
 
       console.log(
-        `Added ${playersToAdd.length} players to existing match ${game.id}`
+        `Added ${playersToAdd.length} players to existing match ${game.id}, now has ${game.players.length} players`
       );
     }
     return;
   }
 
-  // Create a new game with the waiting players (up to 3 max)
-  const playersForMatch = matchmakingPlayers.splice(0, 3);
+  // Create a new game with the waiting players (up to 6 max)
+  const playersForMatch = matchmakingPlayers.splice(0, 6);
   const gameId = generateGameId();
+
+  console.log(
+    `Creating new match ${gameId} with ${playersForMatch.length} players`
+  );
 
   // Setup players for the game
   const gamePlayers = playersForMatch.map((socketId, index) => {
@@ -174,7 +176,9 @@ function startMatchCountdown(gameId) {
   const game = games[gameId];
   if (!game) return;
 
-  console.log(`Starting match countdown for game ${gameId}`);
+  console.log(
+    `Starting match countdown for game ${gameId} with ${game.players.length} players`
+  );
 
   // Initial notification
   io.to(gameId).emit('matchProgress', {
@@ -193,10 +197,14 @@ function startMatchCountdown(gameId) {
         secondsRemaining: game.countdownSeconds,
       });
 
+      console.log(
+        `Game ${gameId} countdown: ${game.countdownSeconds} seconds remaining`
+      );
+
       // Check if it's time to start
       if (game.countdownSeconds <= 0) {
         console.log(
-          `Match countdown finished for game ${gameId}. Starting game...`
+          `Match countdown finished for game ${gameId}. Starting game with ${game.players.length} players...`
         );
 
         // Clear the timer
@@ -206,6 +214,16 @@ function startMatchCountdown(gameId) {
         // Start the game
         game.status = 'playing';
         game.timeRemaining = 180; // 3 minutes
+
+        // Reset any territory ownership at game start
+        game.territories.forEach((territory) => {
+          territory.owner = null;
+        });
+
+        // Reset player scores
+        game.players.forEach((player) => {
+          player.score = 0;
+        });
 
         // Prepare a clean game object for the client
         const clientGame = {

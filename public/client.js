@@ -142,12 +142,15 @@ function initTerritoryLabels() {
 
   // Game started
   socket.on('gameStarted', ({ game }) => {
+    console.log('Game started event received:', game);
+
     // Hide any UI elements from the matchmaking that might still be visible
     if (elements.matchCountdownContainer) {
       elements.matchCountdownContainer.style.display = 'none';
     }
 
     if (elements.findingMatchDiv) {
+      elements.findingMatchDiv.style.display = 'none';
       // Update the waiting message in case it's still visible
       const waitingMessage = document.querySelector(
         '#finding-match .waiting-message'
@@ -157,12 +160,26 @@ function initTerritoryLabels() {
       }
     }
 
+    // Hide create game panel if visible
+    if (elements.gameCreatedDiv) {
+      elements.gameCreatedDiv.style.display = 'none';
+    }
+
+    // Hide join game panel if visible
+    if (elements.joinedGameDiv) {
+      elements.joinedGameDiv.style.display = 'none';
+    }
+
     // Set the game state
     gameState.territories = game.territories;
     gameState.timeRemaining = game.timeRemaining;
     gameState.players = game.players; // Make sure to update players from the game object
 
-    console.log('Game started!', game);
+    console.log('Starting game with state:', {
+      playerCount: gameState.players.length,
+      territories: gameState.territories.length,
+      timeRemaining: gameState.timeRemaining,
+    });
 
     // Start the game
     startGame();
@@ -276,6 +293,11 @@ function initTerritoryLabels() {
 
   // Match progress - will be emitted when we have at least 2 players but are waiting for more
   socket.on('matchProgress', ({ players, secondsRemaining }) => {
+    console.log('Match progress:', {
+      playerCount: players.length,
+      secondsRemaining,
+    });
+
     // Update local game state
     gameState.players = players;
     gameState.matchCountdown = secondsRemaining;
@@ -328,6 +350,8 @@ function initTerritoryLabels() {
 
   // Match found
   socket.on('matchFound', ({ gameId, player, game }) => {
+    console.log('Match found:', { gameId, playerCount: game.players.length });
+
     gameState.gameId = gameId;
     gameState.isHost = player.isHost;
     gameState.gameMode = 'random';
@@ -865,6 +889,7 @@ function initTypingSystem() {
 
 // Start the game
 function startGame() {
+  console.log('Starting game...');
   gameState.isActive = true;
   elements.setupPanel.style.display = 'none';
 
@@ -872,6 +897,9 @@ function startGame() {
   const gameContainer = document.getElementById('game-container');
   if (gameContainer) {
     gameContainer.style.display = 'flex';
+    console.log('Game container made visible');
+  } else {
+    console.error('Game container not found!');
   }
 
   // Reset any previous game state
@@ -893,8 +921,17 @@ function startGame() {
 
   // Update display
   updateScores();
-  elements.currentPhrase.textContent = 'Click on a territory to start typing!';
-  elements.placeholderText.textContent = '';
+
+  if (elements.currentPhrase) {
+    elements.currentPhrase.textContent =
+      'Click on a territory to start typing!';
+  }
+
+  if (elements.placeholderText) {
+    elements.placeholderText.textContent = '';
+  }
+
+  console.log('Game started successfully');
 }
 
 // Function to update the visibility of placeholder text as user types
@@ -1177,8 +1214,17 @@ elements.cancelMatchmakingBtn.addEventListener('click', () => {
 
 // Start game (host only)
 elements.startGameBtn.addEventListener('click', () => {
-  if (gameState.isHost && gameState.players.length >= 1) {
+  console.log('Start game button clicked:', {
+    isHost: gameState.isHost,
+    playerCount: gameState.players.length,
+    gameId: gameState.gameId,
+  });
+
+  if (gameState.isHost) {
     socket.emit('startGame', { gameId: gameState.gameId });
+    console.log('Start game request sent to server');
+  } else {
+    console.log('Not host, cannot start game');
   }
 });
 
