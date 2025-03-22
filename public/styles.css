@@ -1,3 +1,4 @@
+/* Base styles */
 * {
   margin: 0;
   padding: 0;
@@ -8,9 +9,11 @@
 body {
   background-color: #f0f2f5;
   color: #333;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
+/* Game container */
 #game-container {
   max-width: 1200px;
   margin: 0 auto;
@@ -27,6 +30,7 @@ h1 {
   margin-bottom: 10px;
 }
 
+/* Game info bar */
 #game-info {
   display: flex;
   justify-content: space-between;
@@ -47,17 +51,46 @@ h1 {
   color: #e74c3c;
 }
 
+/* Game content layout */
+#game-content {
+  display: flex;
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
+@media (max-width: 768px) {
+  #game-content {
+    flex-direction: column;
+  }
+
+  #map-container,
+  #typing-area {
+    width: 100%;
+  }
+}
+
+/* Map container and SVG */
 #map-container {
+  flex: 1;
   position: relative;
-  width: 100%;
-  height: 500px;
+  height: 0;
+  padding-bottom: 35%; /* Reduced from 50% to make map smaller */
   background-color: #fff;
   border-radius: 8px;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
   overflow: hidden;
-  margin-bottom: 20px;
 }
 
+#world-map {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: #f8f8f8;
+}
+
+/* Territory styles */
 .territory {
   cursor: pointer;
   transition: all 0.3s ease;
@@ -68,6 +101,20 @@ h1 {
   transform: scale(1.05);
 }
 
+.territory-hover {
+  filter: brightness(1.1);
+  stroke-width: 2;
+  transform: scale(1.01);
+}
+
+.territory-active {
+  filter: brightness(1.2);
+  stroke-width: 2.5;
+  stroke: #555;
+  transform: scale(1.02);
+}
+
+/* Territory labels */
 .territory-label {
   position: absolute;
   background-color: rgba(255, 255, 255, 0.85);
@@ -85,35 +132,27 @@ h1 {
   transition: all 0.2s ease;
 }
 
+.territory-label::before {
+  content: '';
+  position: absolute;
+  width: 10px;
+  height: 1px;
+  background-color: rgba(0, 0, 0, 0.3);
+  top: 50%;
+}
+
+.territory-label[style*='text-align: left']::before {
+  left: -10px;
+}
+
+.territory-label[style*='text-align: right']::before {
+  right: -10px;
+}
+
 .territory-label.hover {
   background-color: #f5f5f5;
   transform: scale(1.05);
   z-index: 12;
-}
-
-/* Make the label clickable on small screens */
-@media (max-width: 768px) {
-  .territory-label {
-    pointer-events: auto;
-    cursor: pointer;
-  }
-
-  .territory-label:hover {
-    background-color: #f0f0f0;
-  }
-}
-
-/* Create a pulsing effect when a territory is selected */
-@keyframes pulse {
-  0% {
-    transform: scale(1);
-  }
-  50% {
-    transform: scale(1.05);
-  }
-  100% {
-    transform: scale(1);
-  }
 }
 
 .territory-label.active {
@@ -123,12 +162,17 @@ h1 {
   z-index: 11;
 }
 
-/* Add responsive adjustments */
 @media (max-width: 768px) {
   .territory-label {
+    pointer-events: auto;
+    cursor: pointer;
     font-size: 12px;
     padding: 3px 6px;
     max-width: 100px;
+  }
+
+  .territory-label:hover {
+    background-color: #f0f0f0;
   }
 }
 
@@ -139,38 +183,155 @@ h1 {
   }
 }
 
-/* Add a line connecting the label to the approximate center of each territory */
-.territory-label::before {
-  content: '';
-  position: absolute;
-  width: 10px;
-  height: 1px;
-  background-color: rgba(0, 0, 0, 0.3);
-  top: 50%;
-}
-
-/* Position the connector line based on label alignment */
-.territory-label[style*='text-align: left']::before {
-  left: -10px;
-}
-
-.territory-label[style*='text-align: right']::before {
-  right: -10px;
-}
-
+/* Typing area */
 #typing-area {
-  width: 100%;
+  flex: 1;
   padding: 20px;
   background-color: #fff;
   border-radius: 8px;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  display: flex;
+  flex-direction: column;
 }
 
 #current-phrase {
   font-size: 18px;
-  margin-bottom: 10px;
+  margin-bottom: 20px;
+  font-weight: bold;
 }
 
+/* Typing system */
+#typing-wrapper {
+  position: relative;
+  margin-bottom: 20px;
+  min-height: 200px;
+  max-height: 300px;
+  border: 2px solid #ddd;
+  border-radius: 4px;
+  background-color: #f9f9f9;
+  padding: 12px;
+  overflow-y: auto;
+  font-size: 18px;
+  line-height: 1.5;
+  display: flex;
+  flex-direction: column;
+}
+
+#typing-wrapper.focus,
+#typing-wrapper:focus-within {
+  border-color: #3498db;
+  box-shadow: 0 0 5px rgba(52, 152, 219, 0.5);
+}
+
+.reference-text {
+  font-family: 'Courier New', monospace;
+  word-break: break-word;
+  white-space: pre-wrap;
+  user-select: none;
+  cursor: default;
+  margin-bottom: 15px;
+  flex: 1;
+}
+
+.reference-char {
+  position: relative;
+  display: inline-block;
+  color: #888;
+  background: transparent;
+  border-radius: 2px;
+  padding: 0 1px;
+  margin: 0;
+  transition: all 0.1s ease-in-out;
+}
+
+.reference-char.correct {
+  color: #2c7;
+  background-color: rgba(40, 200, 120, 0.1);
+}
+
+.reference-char.incorrect {
+  color: #e43;
+  background-color: rgba(230, 60, 40, 0.1);
+}
+
+.reference-char.current {
+  position: relative;
+}
+
+.reference-char.current:after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  height: 2px;
+  background-color: #333;
+  animation: blink 1s infinite;
+}
+
+.reference-char.shake {
+  animation: shake 0.5s;
+  color: #e43;
+  background-color: rgba(230, 60, 40, 0.3);
+  font-weight: bold;
+}
+
+.reference-text-line {
+  padding: 0 2px;
+  border-radius: 3px;
+}
+
+.reference-text-line.current {
+  background-color: rgba(200, 200, 200, 0.2);
+}
+
+.territory-claimed {
+  color: #2c7;
+  font-weight: bold;
+  text-align: center;
+  padding: 20px;
+  background-color: #e8f5e9;
+  border-radius: 4px;
+  margin-top: 15px;
+}
+
+.typing-status {
+  margin-top: 10px;
+  padding: 8px;
+  border-radius: 4px;
+  font-size: 14px;
+  background-color: #f0f0f0;
+  color: #666;
+  text-align: center;
+  transition: all 0.3s ease;
+}
+
+.typing-status.error {
+  background-color: #ffebee;
+  color: #e53935;
+  font-weight: bold;
+}
+
+.typing-status.success {
+  background-color: #e8f5e9;
+  color: #43a047;
+  font-weight: bold;
+}
+
+.hidden-input {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  opacity: 0;
+  padding: 0;
+  border: none;
+  outline: none;
+  z-index: -1;
+}
+
+/* Input styles - only used for older implementation */
 #typing-input {
   width: 100%;
   padding: 12px;
@@ -183,21 +344,27 @@ h1 {
 #typing-input:focus {
   outline: none;
   border-color: #3498db;
+  box-shadow: none;
 }
 
-.player {
-  display: flex;
-  align-items: center;
-  margin-bottom: 10px;
+#placeholder-text {
+  position: relative;
+  font-size: 18px;
+  color: #888;
+  opacity: 0.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  pointer-events: none;
+  user-select: none;
+  line-height: 1.5;
 }
 
-.player-color {
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  margin-right: 10px;
+#placeholder-text.error {
+  color: #e74c3c;
+  opacity: 0.7;
 }
 
+/* Game setup screen */
 #game-setup {
   background-color: rgba(0, 0, 0, 0.8);
   position: fixed;
@@ -265,6 +432,7 @@ h1 {
   border: 1px solid #ddd;
 }
 
+/* Buttons */
 #create-game,
 #join-game,
 #find-match,
@@ -309,6 +477,7 @@ h1 {
   user-select: all;
 }
 
+/* Loading spinner */
 .loading-spinner {
   border: 5px solid #f3f3f3;
   border-top: 5px solid #3498db;
@@ -317,15 +486,6 @@ h1 {
   height: 50px;
   animation: spin 1s linear infinite;
   margin: 20px auto;
-}
-
-@keyframes spin {
-  0% {
-    transform: rotate(0deg);
-  }
-  100% {
-    transform: rotate(360deg);
-  }
 }
 
 .player-list {
@@ -339,6 +499,7 @@ h1 {
   color: #7f8c8d;
 }
 
+/* Game over screen */
 #game-over {
   display: none;
   position: fixed;
@@ -377,276 +538,6 @@ h1 {
   background-color: #2980b9;
 }
 
-.progress-container {
-  height: 6px;
-  width: 100%;
-  background-color: #ecf0f1;
-  border-radius: 3px;
-  margin-top: 5px;
-}
-
-.progress-bar {
-  height: 100%;
-  border-radius: 3px;
-  transition: width 0.2s;
-}
-
-/* New layout for game content */
-#game-content {
-  display: flex;
-  gap: 20px;
-  margin-bottom: 20px;
-}
-
-#map-container {
-  position: relative;
-  width: 100%;
-  height: 0;
-  padding-bottom: 50%; /* This creates a responsive 2:1 aspect ratio */
-  background-color: #fff;
-  border-radius: 8px;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-  overflow: hidden;
-}
-
-#world-map {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background-color: #f8f8f8;
-}
-
-#typing-area {
-  flex: 1;
-  padding: 20px;
-  background-color: #fff;
-  border-radius: 8px;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-  display: flex;
-  flex-direction: column;
-}
-
-#current-phrase {
-  font-size: 18px;
-  margin-bottom: 20px;
-  font-weight: bold;
-}
-
-/* Improved typing system */
-#typing-wrapper {
-  position: relative;
-  margin-bottom: 20px;
-  min-height: 200px;
-  max-height: 300px;
-  border: 2px solid #ddd;
-  border-radius: 4px;
-  background-color: #f9f9f9;
-  padding: 12px;
-  overflow-y: auto;
-  font-size: 18px;
-  line-height: 1.5;
-  display: flex;
-  flex-direction: column;
-}
-
-.reference-text {
-  font-family: 'Courier New', monospace;
-  word-break: break-word;
-  white-space: pre-wrap;
-  user-select: none;
-  cursor: default;
-  margin-bottom: 15px;
-  flex: 1;
-}
-
-.reference-char {
-  position: relative;
-  display: inline-block;
-  color: #888;
-  background: transparent;
-  border-radius: 2px;
-  padding: 0 1px;
-  margin: 0;
-  transition: all 0.1s ease-in-out;
-}
-
-.reference-char.correct {
-  color: #2c7;
-  background-color: rgba(40, 200, 120, 0.1);
-}
-/* Styling for incorrectly typed characters */
-.reference-char.incorrect {
-  color: #e43;
-  background-color: rgba(230, 60, 40, 0.1);
-}
-.reference-char.current {
-  position: relative;
-}
-/* Current character indicator (cursor) */
-.reference-char.current:after {
-  content: '';
-  position: absolute;
-  left: 0;
-  bottom: 0;
-  width: 100%;
-  height: 2px;
-  background-color: #333;
-  animation: blink 1s infinite;
-}
-@keyframes shake {
-  0%,
-  100% {
-    transform: translateX(0);
-  }
-  10%,
-  30%,
-  50%,
-  70%,
-  90% {
-    transform: translateX(-5px);
-  }
-  20%,
-  40%,
-  60%,
-  80% {
-    transform: translateX(5px);
-  }
-}
-
-.reference-char.shake {
-  animation: shake 0.5s;
-  color: #e43;
-  background-color: rgba(230, 60, 40, 0.3);
-  font-weight: bold;
-}
-
-/* Hidden input for capturing keystrokes */
-.hidden-input {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 0;
-  height: 0;
-  opacity: 0;
-  padding: 0;
-  border: none;
-  outline: none;
-  z-index: -1;
-}
-
-/* Cursor blinking animation */
-@keyframes blink {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0;
-  }
-}
-
-.typing-status {
-  margin-top: 10px;
-  padding: 8px;
-  border-radius: 4px;
-  font-size: 14px;
-  background-color: #f0f0f0;
-  color: #666;
-  text-align: center;
-  transition: all 0.3s ease;
-}
-
-.typing-status.error {
-  background-color: #ffebee;
-  color: #e53935;
-  font-weight: bold;
-}
-
-.typing-status.success {
-  background-color: #e8f5e9;
-  color: #43a047;
-  font-weight: bold;
-}
-/* Add a highlight for the current line */
-.reference-text-line {
-  padding: 0 2px;
-  border-radius: 3px;
-}
-
-.reference-text-line.current {
-  background-color: rgba(200, 200, 200, 0.2);
-}
-
-/* When territory is claimed, show a success state */
-.territory-claimed {
-  color: #2c7;
-  font-weight: bold;
-  text-align: center;
-  padding: 20px;
-  background-color: #e8f5e9;
-  border-radius: 4px;
-  margin-top: 15px;
-}
-
-#typing-wrapper.focus {
-  border-color: #3498db;
-  box-shadow: 0 0 5px rgba(52, 152, 219, 0.5);
-}
-
-#typing-wrapper:focus-within {
-  border-color: #3498db;
-  box-shadow: 0 0 5px rgba(52, 152, 219, 0.5);
-}
-
-#placeholder-text {
-  position: absolute;
-  top: 12px;
-  left: 12px;
-  right: 12px; /* Ensure text wraps properly */
-  font-size: 18px;
-  color: #888;
-  opacity: 0.5;
-  white-space: pre-wrap; /* Allow text wrapping */
-  word-break: break-word; /* Break words if needed */
-  pointer-events: none;
-  user-select: none;
-  line-height: 1.5; /* Better line height for readability */
-}
-
-#placeholder-text.error {
-  color: #e74c3c;
-  opacity: 0.7;
-}
-
-#typing-input {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  padding: 12px;
-  font-size: 18px;
-  background: transparent;
-  border: none;
-  outline: none;
-  color: #333;
-  z-index: 1;
-  white-space: pre-wrap; /* Match the placeholder text wrapping */
-  word-break: break-word;
-  line-height: 1.5; /* Match line height with placeholder */
-  caret-color: #333; /* Visible cursor */
-  resize: none; /* Prevent textarea resizing if using textarea */
-}
-
-#typing-input:focus {
-  border: none;
-  outline: none;
-  box-shadow: none;
-}
-
-/* Game over screen improvements */
 .winner-banner {
   font-size: 24px;
   font-weight: bold;
@@ -679,6 +570,20 @@ h1 {
   border-bottom: none;
 }
 
+/* Player styles */
+.player {
+  display: flex;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.player-color {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  margin-right: 10px;
+}
+
 /* Prevent text selection in typing area */
 #typing-area {
   user-select: none;
@@ -687,18 +592,59 @@ h1 {
   -ms-user-select: none;
 }
 
-/* Make the game container responsive */
-@media (max-width: 768px) {
-  #game-content {
-    flex-direction: column;
-  }
+/* Utility classes */
+.padding-5px {
+  padding: 5px;
+}
 
-  #map-container,
-  #typing-area {
-    width: 100%;
+/* Animations */
+@keyframes pulse {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+  100% {
+    transform: scale(1);
   }
 }
 
-.padding-5px {
-  padding: 5px;
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+
+@keyframes shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  10%,
+  30%,
+  50%,
+  70%,
+  90% {
+    transform: translateX(-5px);
+  }
+  20%,
+  40%,
+  60%,
+  80% {
+    transform: translateX(5px);
+  }
 }
