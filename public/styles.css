@@ -348,13 +348,99 @@ h1 {
 #typing-wrapper {
   position: relative;
   margin-bottom: 20px;
-  min-height: 200px; /* Minimum height */
-  max-height: 300px; /* Maximum height with scrolling */
+  min-height: 200px;
+  max-height: 300px;
   border: 2px solid #ddd;
   border-radius: 4px;
   background-color: #f9f9f9;
   padding: 12px;
-  overflow-y: auto; /* Allow vertical scrolling if needed */
+  overflow-y: auto;
+  font-size: 18px;
+  line-height: 1.5;
+}
+
+.reference-text {
+  font-family: 'Courier New', monospace;
+  word-break: break-word;
+  white-space: pre-wrap;
+  user-select: none;
+  cursor: default;
+}
+
+.reference-char {
+  position: relative;
+  display: inline-block;
+  color: #888;
+  background: transparent;
+  border-radius: 2px;
+  padding: 0;
+  margin: 0;
+}
+
+.reference-char.correct {
+  color: #2c7;
+  background-color: rgba(40, 200, 120, 0.1);
+}
+
+/* Styling for incorrectly typed characters */
+.reference-char.incorrect {
+  color: #e43;
+  background-color: rgba(230, 60, 40, 0.1);
+}
+
+/* Current character indicator (cursor) */
+.reference-char.current:after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  height: 2px;
+  background-color: #333;
+  animation: blink 1s infinite;
+}
+
+/* Hidden input for capturing keystrokes */
+.hidden-input {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  opacity: 0;
+  padding: 0;
+  border: none;
+  outline: none;
+  z-index: -1;
+}
+
+/* Cursor blinking animation */
+@keyframes blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+
+/* Add a highlight for the current line */
+.reference-text-line {
+  padding: 0 2px;
+  border-radius: 3px;
+}
+
+.reference-text-line.current {
+  background-color: rgba(200, 200, 200, 0.2);
+}
+
+/* When territory is claimed, show a success state */
+.territory-claimed {
+  color: #2c7;
+  font-weight: bold;
+  text-align: center;
+  padding: 20px;
 }
 
 #placeholder-text {

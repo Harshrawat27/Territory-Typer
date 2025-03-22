@@ -113,7 +113,6 @@ function attachTerritoryEvents() {
 
 // Add this function to normalize apostrophes in your client.js file
 function normalizeApostrophes(text) {
-  // Replace all types of apostrophes with a standard one
   return text.replace(/['′'‛]/g, "'");
 }
 
@@ -136,14 +135,48 @@ function selectTerritory(territory) {
   typingStartTime = Date.now();
   currentPhraseLength = territory.phrase.length;
 
-  // Set the placeholder text - clear any previous content first
-  elements.placeholderText.textContent = territory.phrase;
-  elements.placeholderText.classList.remove('error');
+  // Clear the typing wrapper
+  elements.typingWrapper.innerHTML = '';
 
-  // Clear and enable input
-  elements.typingInput.value = '';
-  elements.typingInput.disabled = false;
-  elements.typingInput.focus();
+  // Create the character-by-character display
+  const referenceText = normalizeApostrophes(territory.phrase);
+
+  // Create a container for the reference text
+  const referenceContainer = document.createElement('div');
+  referenceContainer.className = 'reference-text';
+
+  // Create spans for each character
+  for (let i = 0; i < referenceText.length; i++) {
+    const charSpan = document.createElement('span');
+    charSpan.textContent = referenceText[i];
+    charSpan.className = 'reference-char';
+    charSpan.dataset.index = i;
+    referenceContainer.appendChild(charSpan);
+  }
+
+  // Add the reference container to the typing wrapper
+  elements.typingWrapper.appendChild(referenceContainer);
+
+  // Create a hidden input for typing
+  const hiddenInput = document.createElement('input');
+  hiddenInput.type = 'text';
+  hiddenInput.className = 'hidden-input';
+  hiddenInput.autocomplete = 'off';
+  hiddenInput.spellcheck = false;
+  elements.typingWrapper.appendChild(hiddenInput);
+
+  // Focus the hidden input
+  hiddenInput.focus();
+
+  // Add event listeners to the hidden input
+  hiddenInput.addEventListener('input', handleTyping);
+  hiddenInput.addEventListener('paste', function (e) {
+    e.preventDefault();
+    return false;
+  });
+
+  // Store reference to the hidden input
+  elements.typingInput = hiddenInput;
 
   // Notify server about territory selection
   socket.emit('selectTerritory', {
@@ -151,6 +184,82 @@ function selectTerritory(territory) {
     territoryId: territory.id,
   });
 }
+
+// New typing handler
+function handleTyping(e) {
+  if (!gameState.selectedTerritory) return;
+
+  const referenceText = normalizeApostrophes(
+    gameState.selectedTerritory.phrase
+  );
+  const typedText = normalizeApostrophes(e.target.value);
+
+  // Update character styling based on what's been typed
+  const referenceChars = document.querySelectorAll('.reference-char');
+
+  let allCorrect = true;
+
+  for (let i = 0; i < referenceChars.length; i++) {
+    const charSpan = referenceChars[i];
+
+    if (i < typedText.length) {
+      // Character has been typed
+      if (typedText[i] === referenceText[i]) {
+        // Correct character
+        charSpan.className = 'reference-char correct';
+      } else {
+        // Incorrect character
+        charSpan.className = 'reference-char incorrect';
+        allCorrect = false;
+      }
+    } else {
+      // Character not yet typed
+      charSpan.className = 'reference-char';
+    }
+  }
+
+  // Check if all typed characters are correct and complete
+  if (allCorrect && typedText.length === referenceText.length) {
+    // Calculate typing speed
+    const typingTime = (Date.now() - typingStartTime) / 1000; // in seconds
+    const typingSpeed = Math.round((currentPhraseLength / typingTime) * 60); // chars per minute
+
+    // Notify server
+    socket.emit('claimTerritory', {
+      gameId: gameState.gameId,
+      territoryId: gameState.selectedTerritory.id,
+      typingSpeed: typingSpeed,
+    });
+
+    // Clear the typing area
+    elements.typingWrapper.innerHTML = '';
+    elements.currentPhrase.textContent = `You claimed ${gameState.selectedTerritory.name}!`;
+    gameState.selectedTerritory = null;
+  }
+}
+
+// Add this to initialize the typing system when the game starts
+function initTypingSystem() {
+  // Remove old event listeners
+  const oldInput = elements.typingInput;
+  if (oldInput) {
+    oldInput.removeEventListener('input', handleTyping);
+    oldInput.removeEventListener('paste', function (e) {
+      e.preventDefault();
+      return false;
+    });
+  }
+
+  // Clear the typing wrapper
+  elements.typingWrapper.innerHTML = '';
+  elements.currentPhrase.textContent = 'Click on a territory to start typing!';
+}
+
+const originalStartGame = startGame;
+startGame = function () {
+  originalStartGame();
+  initTypingSystem();
+};
 
 // Function to update the visibility of placeholder text as user types
 function updatePlaceholderVisibility(typedText, targetPhrase) {
