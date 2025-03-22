@@ -22,6 +22,7 @@ const gameState = {
   gameId: null,
   isHost: false,
   gameMode: null,
+  typingAttempts: [], // Add this to track all typing attempts
 };
 
 // Typing speed tracking
@@ -265,6 +266,28 @@ function calculateWPM(charCount, timeInSeconds) {
 
 // Select a territory to claim
 function selectTerritory(territory) {
+  // First, check if user was in the middle of typing for another territory
+  if (gameState.selectedTerritory && typingStartTime) {
+    // Calculate partial WPM for abandoned territory
+    const typedText = elements.typingInput ? elements.typingInput.value : '';
+    if (typedText && typedText.length > 5) {
+      // Only count significant attempts (more than 5 chars)
+      const partialTime = (Date.now() - typingStartTime) / 1000; // in seconds
+      const partialWPM = calculateWPM(typedText.length, partialTime);
+
+      // Add to tracking array
+      gameState.typingAttempts.push(partialWPM);
+
+      // Could also send to server to track partial attempts
+      socket.emit('typingAttempt', {
+        gameId: gameState.gameId,
+        territoryId: gameState.selectedTerritory.id,
+        typingSpeed: partialWPM,
+        completed: false,
+      });
+    }
+  }
+
   if (territory.owner === gameState.currentPlayer.id) {
     elements.currentPhrase.textContent = `You already own ${territory.name}!`;
     return;
@@ -420,6 +443,9 @@ function handleTyping(e) {
     const typingTime = (Date.now() - typingStartTime) / 1000; // in seconds
     const typingWPM = calculateWPM(currentPhraseLength, typingTime);
 
+    // Track this attempt in the game state
+    gameState.typingAttempts.push(typingWPM);
+
     // Update typing status
     if (elements.typingStatus) {
       elements.typingStatus.textContent = `Completed! Your typing speed: ${typingWPM} WPM`;
@@ -430,7 +456,7 @@ function handleTyping(e) {
     socket.emit('claimTerritory', {
       gameId: gameState.gameId,
       territoryId: gameState.selectedTerritory.id,
-      typingSpeed: typingWPM, // Now sending WPM instead of CPM
+      typingSpeed: typingWPM,
     });
 
     // Show completion message
@@ -627,10 +653,30 @@ function endGame(players) {
   // Display final scores with typing speeds
   elements.finalScores.innerHTML = '<h3>Final Standings:</h3>';
 
+  // Check for ties in score (for displaying UI differently)
+  const tiedScores = {};
+  players.forEach((player) => {
+    if (!tiedScores[player.score]) {
+      tiedScores[player.score] = 1;
+    } else {
+      tiedScores[player.score]++;
+    }
+  });
+
   if (winner) {
     const winnerBanner = document.createElement('div');
     winnerBanner.className = 'winner-banner';
+
+    // Check if winner won by tie-breaker
+    const isTiedWinner = tiedScores[winner.score] > 1;
+
     winnerBanner.innerHTML = `🏆 <span style="color:${winner.color}">${winner.name}</span> wins with ${winner.score} territories! 🏆`;
+
+    if (isTiedWinner) {
+      // If there was a tie that was broken by typing speed
+      winnerBanner.innerHTML += `<div class="winner-note">Won by typing speed: ${winner.avgTypingSpeed} WPM</div>`;
+    }
+
     elements.finalScores.appendChild(winnerBanner);
   }
 
@@ -639,9 +685,18 @@ function endGame(players) {
 
   // Add table header
   const headerRow = document.createElement('tr');
+
+  // Add info icon if there are any ties
+  const hasTies = Object.values(tiedScores).some((count) => count > 1);
+  let tieHeader = '';
+  if (hasTies) {
+    tieHeader =
+      '<span class="tie-info" title="Players tied in territories are ranked by typing speed">i</span>';
+  }
+
   headerRow.innerHTML = `
       <th>Rank</th>
-      <th>Player</th>
+      <th>Player${tieHeader}</th>
       <th>Territories</th>
       <th>Typing Speed</th>
   `;
@@ -649,12 +704,39 @@ function endGame(players) {
 
   // Add player rows
   players.forEach((player, index) => {
+    // Make sure every player has a typing speed displayed
+    const avgSpeed = player.avgTypingSpeed || 0;
+    // For the current player, use local tracking if server value is 0
+    let displaySpeed = avgSpeed;
+    if (
+      player.id === gameState.currentPlayer.id &&
+      avgSpeed === 0 &&
+      gameState.typingAttempts.length > 0
+    ) {
+      // Use locally tracked attempts if server didn't receive any
+      const localAvg =
+        gameState.typingAttempts.reduce((sum, speed) => sum + speed, 0) /
+        gameState.typingAttempts.length;
+      displaySpeed = Math.round(localAvg);
+    }
+
     const playerRow = document.createElement('tr');
+
+    // Add class if this player is in a tie
+    if (tiedScores[player.score] > 1) {
+      // The winner of the tie gets a special class
+      if (index === 0 && player.score === players[1].score) {
+        playerRow.className = 'tied-winner';
+      } else {
+        playerRow.className = 'tied';
+      }
+    }
+
     playerRow.innerHTML = `
           <td>${index + 1}</td>
           <td><span style="color:${player.color}">${player.name}</span></td>
           <td>${player.score}</td>
-          <td>${player.avgTypingSpeed || 0} WPM</td>
+          <td>${displaySpeed} WPM</td>
       `;
     scoresTable.appendChild(playerRow);
   });
@@ -833,6 +915,9 @@ elements.playAgainBtn.addEventListener('click', () => {
   elements.gameOver.style.display = 'none';
   elements.setupPanel.style.display = 'flex';
 
+  // Reset typing attempts
+  gameState.typingAttempts = [];
+
   // Send play again request to server
   socket.emit('playAgain');
 
@@ -925,9 +1010,11 @@ socket.on('playerJoined', ({ player, gameId, players }) => {
 socket.on('gameStarted', ({ game }) => {
   gameState.territories = game.territories;
   gameState.timeRemaining = game.timeRemaining;
+  gameState.typingAttempts = []; // Reset typing attempts for new game
 
   initTerritoryLabels();
   startGame();
+  initTypingSystem();
 });
 
 // Timer update
